@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CARGO SEGURA - Gestor de Tráfico</title>
+    <style>
+        /* Estilos básicos para el control de sesión */
+        .header-controls {
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+        }
+        .header-controls a {
+            text-decoration: none;
+            color: #1e40af; /* Azul para enlaces */
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-controls">
+        {% if current_user.is_authenticated %}
+            {% if current_user.is_admin %}
+                <a href="{{ url_for('admin.index') }}">Panel Admin</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}">Cerrar Sesión ({{ current_user.username }})</a>
+        {% else %}
+            <a href="{{ url_for('login') }}">Iniciar Sesión</a>
+        {% endif %}
+    </div>
+
+    {{ original_content | safe }}
+    
+</body>
+</html>
