@@ -120,37 +120,42 @@
     </style>
 </head>
 <body class="bg-slate-100 h-screen flex flex-col overflow-hidden font-sans text-slate-800">
-    <!-- BARRA DE NAVEGACIÓN AÑADIDA -->
-    <header class="bg-indigo-600 shadow-md mb-4">
-        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
+  <!-- BARRA DE NAVEGACIÓN COMPACTA -->
+    <header class="bg-indigo-600 shadow-lg flex-shrink-0">
+        <!-- **CAMBIO: h-16 a h-12 para hacerlo más compacto** -->
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-12"> 
+            <div class="flex justify-between items-center h-full">
                 <!-- LOGO/TÍTULO -->
                 <div class="flex-shrink-0">
-                    <a href="{{ url_for('index') }}" class="text-white text-xl font-bold tracking-wider">
-                        <i class="fas fa-truck-moving mr-2"></i>Gestor de Tráfico
+                    <!-- **CAMBIO: text-xl a text-lg para hacerlo más compacto** -->
+                    <a href="{{ url_for('index') }}" class="text-white text-lg font-bold tracking-wider">
+                        <i class="fas fa-truck-moving mr-2"></i>CARGO SEGURA - Gestor de Tráfico
                     </a>
                 </div>
 
                 <!-- ENLACES DE NAVEGACIÓN Y AUTENTICACIÓN -->
-                <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-3">
                     {% if current_user.is_authenticated %}
                         <!-- Enlace al Dashboard de Admin (solo visible para administradores) -->
                         {% if current_user.is_admin %}
+                            <!-- **CAMBIO: py-2 a py-1 para ahorrar espacio** -->
                             <a href="{{ url_for('admin.index') }}" 
-                               class="text-white hover:bg-indigo-700 px-3 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out">
+                               class="text-white hover:bg-indigo-700 px-3 py-1 rounded-md text-sm font-medium transition duration-150 ease-in-out">
                                 <i class="fas fa-user-shield mr-1"></i> Panel Admin
                             </a>
                         {% endif %}
 
-                        <!-- Enlace de Cerrar Sesión (Logout) -->
+                        <!-- Enlace de Cerrar Sesión (Logout) - MÁS COMPACTO Y SIN NOMBRE DE USUARIO -->
+                        <!-- **Ajustado: py-1 a py-0.5 y quitado el nombre de usuario** -->
                         <a href="{{ url_for('logout') }}" 
-                           class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out shadow-lg">
-                            <i class="fas fa-sign-out-alt mr-1"></i> Cerrar Sesión ({{ current_user.username }})
+                           class="bg-red-500 hover:bg-red-600 text-white px-2 py-0.5 rounded-md text-sm font-medium transition duration-150 ease-in-out shadow-lg">
+                            <i class="fas fa-sign-out-alt mr-1"></i> Cerrar Sesión
                         </a>
                     {% else %}
                         <!-- Enlace de Iniciar Sesión (si no está autenticado) -->
+                        <!-- **CAMBIO: py-2 a py-1 para ahorrar espacio** -->
                         <a href="{{ url_for('login') }}" 
-                           class="text-white hover:bg-indigo-700 px-3 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out">
+                           class="text-white hover:bg-indigo-700 px-3 py-1 rounded-md text-sm font-medium transition duration-150 ease-in-out">
                             <i class="fas fa-sign-in-alt mr-1"></i> Iniciar Sesión
                         </a>
                     {% endif %}
@@ -1686,4 +1691,5 @@
     </script>
 </body>
 </html>
+
 
