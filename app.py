@@ -99,7 +99,7 @@ admin.add_view(ProtectedAdminView(User, db.session, name='Usuarios'))
 
 # --- 5. LÓGICA DE INICIO DE SESIÓN Y USUARIO INICIAL ---
 
-@app.before_first_request
+@app.cli.before_app_serving
 def create_db_and_admin():
     """Crea la base de datos y un usuario administrador inicial si no existen."""
     try:
