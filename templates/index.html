@@ -120,6 +120,59 @@
     </style>
 </head>
 <body class="bg-slate-100 h-screen flex flex-col overflow-hidden font-sans text-slate-800">
+    <!-- BARRA DE NAVEGACIÓN AÑADIDA -->
+    <header class="bg-indigo-600 shadow-md mb-4">
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- LOGO/TÍTULO -->
+                <div class="flex-shrink-0">
+                    <a href="{{ url_for('index') }}" class="text-white text-xl font-bold tracking-wider">
+                        <i class="fas fa-truck-moving mr-2"></i>Gestor de Tráfico
+                    </a>
+                </div>
+
+                <!-- ENLACES DE NAVEGACIÓN Y AUTENTICACIÓN -->
+                <div class="flex items-center space-x-4">
+                    {% if current_user.is_authenticated %}
+                        <!-- Enlace al Dashboard de Admin (solo visible para administradores) -->
+                        {% if current_user.is_admin %}
+                            <a href="{{ url_for('admin.index') }}" 
+                               class="text-white hover:bg-indigo-700 px-3 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out">
+                                <i class="fas fa-user-shield mr-1"></i> Panel Admin
+                            </a>
+                        {% endif %}
+
+                        <!-- Enlace de Cerrar Sesión (Logout) -->
+                        <a href="{{ url_for('logout') }}" 
+                           class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out shadow-lg">
+                            <i class="fas fa-sign-out-alt mr-1"></i> Cerrar Sesión ({{ current_user.username }})
+                        </a>
+                    {% else %}
+                        <!-- Enlace de Iniciar Sesión (si no está autenticado) -->
+                        <a href="{{ url_for('login') }}" 
+                           class="text-white hover:bg-indigo-700 px-3 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out">
+                            <i class="fas fa-sign-in-alt mr-1"></i> Iniciar Sesión
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </nav>
+    </header>
+    <!-- FIN DE BARRA DE NAVEGACIÓN -->
+
+    <!-- Manejo de Mensajes Flash (éxito, error, info) -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-lg text-sm {% if category == 'danger' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+    <!-- FIN DE MENSAJES FLASH -->
 
     <header class="bg-white shadow-sm z-20 flex flex-col no-print border-t-4 border-red-600">
         <div class="flex items-center justify-between px-6 py-2 border-b border-slate-200 h-16">
@@ -1633,3 +1686,4 @@
     </script>
 </body>
 </html>
+
