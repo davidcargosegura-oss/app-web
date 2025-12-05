@@ -1371,6 +1371,8 @@
             ev.currentTarget.classList.add('drag-over');
         }
 
+        document.addEventListener('dragleave', e => {
+            if (e.target.classList.contains('drop-zone')) e.target.classList.remove('drag-over');
         });
 
         // NEW: Render Destination Zone Selector (Clone needed for different ID/Name)
