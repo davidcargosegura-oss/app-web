@@ -1041,6 +1041,48 @@
             });
         }
 
+        // Render Zone Counters (Top Statistics)
+        function renderZoneCounters(dateFilter) {
+            const container = document.getElementById('zone-counters');
+            container.innerHTML = '';
+
+            ZONES.forEach((zone) => {
+                // Count TRUCKS in this zone
+                const trucksInZone = trucks.filter(t =>
+                    isTruckActiveForDate(t, dateFilter) &&
+                    !isTruckOutOfService(t.plate, dateFilter) &&
+                    t.zones.includes(zone.name)
+                );
+
+                // Count PENDING TRIPS for this zone (Origin = Zone)
+                const pendingDeparture = trips.filter(t =>
+                    t.assignedTruck === null &&
+                    t.zone === zone.name &&
+                    t.type === 'departure' &&
+                    (!dateFilter || t.loadDate === dateFilter)
+                );
+
+                const pendingReturn = trips.filter(t =>
+                    t.assignedTruck === null &&
+                    t.zone === zone.name &&
+                    t.type === 'return' &&
+                    (!dateFilter || t.loadDate === dateFilter)
+                );
+
+                const div = document.createElement('div');
+                div.className = `flex flex-col items-center p-2 rounded border ${zone.color} bg-opacity-10 border-opacity-20`;
+                div.innerHTML = `
+                    <span class="text-xs font-bold text-slate-600 mb-1">${zone.code}</span>
+                    <div class="flex gap-2 text-[10px] font-mono">
+                        <span class="text-slate-500" title="Camiones Activos"><i class="fa-solid fa-truck"></i> ${trucksInZone.length}</span>
+                        <span class="text-red-500" title="Salidas Pendientes"><i class="fa-solid fa-arrow-right-from-bracket"></i> ${pendingDeparture.length}</span>
+                        <span class="text-green-500" title="Retornos Pendientes"><i class="fa-solid fa-arrow-right-to-bracket"></i> ${pendingReturn.length}</span>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
         function renderUnassigned(dateFilter) {
             const unassignedDepartureZone = document.getElementById('unassigned-departure-zone');
             const unassignedReturnZone = document.getElementById('unassigned-return-zone');
