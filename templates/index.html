@@ -1738,13 +1738,12 @@
                 // We must save this change to persist the "auto mode" re-enabling.
                 await api.saveTruck(assignedTruckObj);
             }
-        }
 
-        // Forzar recálculo de ubicación para el camión de destino para el día siguiente.
-        clearTruckPersistence(plate);
+            // Forzar recálculo de ubicación para el camión de destino para el día siguiente.
+            clearTruckPersistence(plate);
 
-        await api.saveTrip(trip); // SAVE API
-        await loadData();
+            await api.saveTrip(trip); // SAVE API
+            await loadData();
         }
 
         function exportToCSV() {
