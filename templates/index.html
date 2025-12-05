@@ -598,11 +598,14 @@
 
         // --- TRUCK HELPERS (RESTORED) ---
 
-        function clearTruckPersistence(plate) {
+        async function clearTruckPersistence(plate) {
             const truck = trucks.find(t => t.plate === plate);
             if (truck) {
                 truck.locationLastUpdatedDate = '2000-01-01'; // Force update on next check
-                // We do NOT clear location here, we just invalidate the "freshness" so logic runs again
+                // We likely need to save this reset to the backend, otherwise loadData() will overwrite it with the old date.
+                try {
+                    await api.saveTruck(truck);
+                } catch (e) { console.error("Error clearing persistence", e); }
             }
         }
 
@@ -998,7 +1001,7 @@
                     ${palletSummaryHTML}
 
                     <div class="flex justify-center gap-1 mt-1 mb-0">
-                        ${ZONES.map(z => createZoneButton(truck.zones, z)).join('')}
+                        ${ZONES.map(z => createZoneButton(truck.zones, z, truck.plate)).join('')}
                     </div>
                     <input type="text" 
                            placeholder="Ubicación"
@@ -1202,14 +1205,15 @@
         // --- Funciones de Viajes y Drag/Drop ---
 
         // Helper to render zone toggle buttons inside the truck row
-        function createZoneButton(activeList, zone) {
+        function createZoneButton(activeList, zone, truckPlate) {
             // activeList contains names (e.g. 'Murcia'), we display code (e.g. 'MU')
             const isActive = activeList.includes(zone.name);
             return `
-                <button disabled class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors
+                <button onclick="toggleZone('${truckPlate}', '${zone.name}')" 
+                    class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors cursor-pointer
                     ${isActive
                     ? `bg-${zone.baseColor}-500 text-white shadow-sm ring-1 ring-${zone.baseColor}-600`
-                    : 'bg-slate-100 text-slate-300 border border-slate-200'}">
+                    : 'bg-slate-100 text-slate-300 border border-slate-200 hover:bg-slate-200'}">
                     ${zone.code}
                 </button>
             `;
