@@ -157,15 +157,41 @@ admin.add_view(ProtectedAdminView(Trip, db.session, name='Viajes'))
 admin.add_view(ProtectedAdminView(DailyNote, db.session, name='Notas'))
 
 # --- 4. INIT & RUTAS BASIVAS ---
-def create_db_and_admin():
-    with app.app_context():
-        db.create_all()
-        if not User.query.filter_by(username='davidp').first():
-            u = User(username='davidp', is_admin=True)
-            u.set_password('admin')
-            db.session.add(u)
-            db.session.commit()
-            print("Admin 'davidp' creado.")
+# --- 4. INIT & RUTAS BASIVAS ---
+# --- 4. INIT & RUTAS BASIVAS ---
+# Flag global para controlar la inicialización por worker
+_db_initialized = False
+
+@app.before_request
+def init_db_on_first_request():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            inspector = db.inspect(db.engine)
+            tables = inspector.get_table_names()
+            print(f"Tablas existentes antes de check: {tables}")
+            
+            db.create_all()
+            
+            if not User.query.filter_by(username='davidp').first():
+                u = User(username='davidp', is_admin=True)
+                u.set_password('admin')
+                db.session.add(u)
+                db.session.commit()
+                print("Admin 'davidp' creado.")
+            
+            _db_initialized = True
+            print("Base de datos inicializada correctamente.")
+        except Exception as e:
+            print(f"Error inicializando base de datos: {e}")
+
+# (Funcion anterior create_db_and_admin eliminada/reemplazada por este hook)
+
+# create_db_and_admin() removed in favor of before_request hook
+
+@app.route('/health')
+def health_check():
+    return "OK", 200
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -298,6 +324,28 @@ def fds():
     elif r: db.session.delete(r)
     db.session.commit()
     return jsonify({'success': True})
+
+@app.route('/api/unassign-day', methods=['POST'])
+@login_required
+def unassign_day():
+    date_filter = request.json.get('date')
+    if not date_filter:
+        return jsonify({'error': 'Date is required'}), 400
+        
+    # Find all trips for this date that are assigned
+    trips_to_update = Trip.query.filter_by(load_date=date_filter).filter(Trip.assigned_truck_plate != None).all()
+    
+    for t in trips_to_update:
+        t.assigned_truck_plate = None
+        t.assigned_slot = None
+        t.notify_time = ""
+        t.is_notified = False
+        
+    db.session.commit()
+    return jsonify({'success': True, 'count': len(trips_to_update)})
+
+if __name__ == '__main__':
+    app.run(debug=True)
 
 if __name__ == '__main__':
     create_db_and_admin()
