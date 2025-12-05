@@ -616,6 +616,32 @@
             }
         }
 
+        async function addTruck() {
+            const plate = prompt("Introduce la matrícula del nuevo camión:");
+            if (!plate) return;
+
+            // Basic validation
+            if (trucks.some(t => t.plate === plate)) {
+                alert("Ya existe un camión con esta matrícula.");
+                return;
+            }
+
+            const newTruck = {
+                plate: plate.toUpperCase(),
+                location: '',
+                zones: [], // Empty by default
+                creationDate: new Date().toISOString().split('T')[0]
+            };
+
+            try {
+                await api.saveTruck(newTruck);
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert("Error creando camión: " + error.message);
+            }
+        }
+
         function getTruckSuggestedLocation(truck, currentDate, forceRecalculate = false) {
             // 1. If manual override is active for this day/logic... (implied by isLocationManual flag check below)
 
@@ -960,7 +986,7 @@
                     ${palletSummaryHTML}
 
                     <div class="flex justify-center gap-1 mt-1 mb-0">
-                        ${ZONES.map(z => createZoneButton(plate, z, truck.zones)).join('')}
+                        ${ZONES.map(z => createZoneButton(truck.zones, z.name)).join('')}
                     </div>
                     <input type="text" 
                            placeholder="Ubicación"
