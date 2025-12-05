@@ -348,6 +348,18 @@ def fds():
     db.session.commit()
     return jsonify({'success': True})
 
+@app.route('/update_db_schema')
+def update_db_schema():
+    # Temporary route to add missing column
+    try:
+        with app.app_context():
+            # Postgres specific: ADD COLUMN IF NOT EXISTS
+            db.session.execute(text("ALTER TABLE trip ADD COLUMN IF NOT EXISTS destination_zone VARCHAR(50);"))
+            db.session.commit()
+            return "Schema updated successfully. You can now use the app."
+    except Exception as e:
+        return f"Error updating schema: {e}"
+
 @app.route('/api/unassign-day', methods=['POST'])
 @login_required
 def unassign_day():
