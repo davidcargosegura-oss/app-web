@@ -269,6 +269,8 @@ def save_trip():
         t = Trip()
         db.session.add(t)
     
+    print(f"DEBUG: Guardando viaje. ID: {tid}, Datos: {d}")
+    
     t.type = d.get('type')
     t.client = d.get('client')
     t.driver = d.get('driver')
@@ -276,17 +278,23 @@ def save_trip():
     t.destination = d.get('destination')
     t.load_date = d.get('loadDate')
     t.unload_date = d.get('unloadDate')
+    
     # Handle nullable foreign key for truck
     t.assigned_truck_plate = d.get('assignedTruck') or None 
     t.assigned_slot = d.get('assignedSlot')
+    
     t.is_urgent = d.get('isUrgent', False)
     t.is_groupage = d.get('isGroupage', False)
     t.zone = d.get('zone')
-    t.pg, t.ep, t.pp = d.get('pg', 0), d.get('ep', 0), d.get('pp', 0)
+    t.pg = d.get('pg', 0)
+    t.ep = d.get('ep', 0)
+    t.pp = d.get('pp', 0)
+    
     t.notify_time = d.get('notifyTime', '')
     t.is_notified = d.get('isNotified', False)
     
     db.session.commit()
+    print(f"DEBUG: Viaje guardado correctamente. ID: {t.id}")
     return jsonify(t.to_dict())
 
 @app.route('/api/trips/<int:tid>', methods=['DELETE'])
@@ -345,8 +353,4 @@ def unassign_day():
     return jsonify({'success': True, 'count': len(trips_to_update)})
 
 if __name__ == '__main__':
-    app.run(debug=True)
-
-if __name__ == '__main__':
-    create_db_and_admin()
     app.run(debug=True)
