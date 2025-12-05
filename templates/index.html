@@ -1441,6 +1441,56 @@
             document.getElementById('tripForm').reset();
         }
 
+        async function saveTrip(event) {
+            event.preventDefault();
+            const idInput = document.getElementById('editTripId').value;
+            const id = idInput ? parseInt(idInput) : null;
+            const client = document.getElementById('client').value;
+            const driver = document.getElementById('driver').value;
+            const origin = document.getElementById('origin').value;
+            const destination = document.getElementById('destination').value;
+            const loadDate = document.getElementById('loadDate').value;
+            const unloadDate = document.getElementById('unloadDate').value;
+            const type = document.querySelector('input[name="tripType"]:checked').value;
+            const isUrgent = document.getElementById('isUrgent').checked;
+            const isGroupage = document.getElementById('isGroupage').checked;
+            // Get selected zone
+            const zoneInput = document.querySelector('input[name="tripZone"]:checked');
+            const zone = zoneInput ? zoneInput.value : null;
+
+            const pg = parseInt(document.getElementById('pg').value) || 0;
+            const ep = parseInt(document.getElementById('ep').value) || 0;
+            const pp = parseInt(document.getElementById('pp').value) || 0;
+
+            const tripData = {
+                id: id,
+                client, driver, origin, destination, loadDate, unloadDate, type,
+                isUrgent, isGroupage, zone,
+                pg, ep, pp
+            };
+
+            // Preserve assigned truck/slot if editing, though usually modal is for generic editing.
+            // If it's a new trip, they are null by default in backend or we send null.
+            if (id) {
+                const existingTrip = trips.find(t => t.id === id);
+                if (existingTrip) {
+                    tripData.assignedTruck = existingTrip.assignedTruck;
+                    tripData.assignedSlot = existingTrip.assignedSlot;
+                    tripData.notifyTime = existingTrip.notifyTime;
+                    tripData.isNotified = existingTrip.isNotified;
+                }
+            }
+
+            try {
+                await api.saveTrip(tripData);
+                closeModal();
+                loadData(); // This will re-fetch data and re-render everything
+            } catch (err) {
+                console.error(err);
+                alert("Error al guardar viaje: " + err.message);
+            }
+        }
+
         async function deleteTrip() {
             const idToDelete = parseInt(document.getElementById('editTripId').value);
             const trip = trips.find(t => t.id === idToDelete);
