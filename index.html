@@ -551,6 +551,14 @@
         }, {});
 
         // Helper to get Trip CR (Calculated Result/Ratio)
+
+        window.formatDate = function (dateStr) {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        };
+
         function getTripCR(trip) {
             const pg = (trip.pg || 0) * 1.0;
             const ep = (trip.ep || 0) * 0.8;
@@ -580,12 +588,74 @@
             return compareDates(dateStr, today) < 0;
         }
 
-        function formatDate(dateStr) {
-            if (!dateStr) return '';
-            const parts = dateStr.split('-');
-            if (parts.length !== 3) return dateStr;
-            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        function isTruckActiveForDate(truck, date) {
+            // If truck created AFTER date, it wasn't active yet.
+            if (compareDates(truck.creationDate, date) > 0) return false;
+            // If truck deleted BEFORE or ON date, it's not active.
+            if (truck.deletionDate && compareDates(truck.deletionDate, date) <= 0) return false;
+            return true;
         }
+
+        // --- TRUCK HELPERS (RESTORED) ---
+
+        function clearTruckPersistence(plate) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (truck) {
+                truck.locationLastUpdatedDate = '2000-01-01'; // Force update on next check
+                // We do NOT clear location here, we just invalidate the "freshness" so logic runs again
+            }
+        }
+
+        function updateTruckLocation(plate) {
+            const input = document.getElementById(`location-${plate}`);
+            const truck = trucks.find(t => t.plate === plate);
+            if (truck) {
+                truck.location = input.value;
+                truck.isLocationManual = true; // User manually set it
+                api.saveTruck(truck); // Autosave
+            }
+        }
+
+        function getTruckSuggestedLocation(truck, currentDate, forceRecalculate = false) {
+            // 1. If manual override is active for this day/logic... (implied by isLocationManual flag check below)
+
+            // 2. Find the LAST trip this truck completed BEFORE or ON this date.
+            // Trips sorted by unloadDate DESC? No, trips is raw list.
+
+            // Filter trips for this truck that ended BEFORE or ON currentDate
+            const completedTrips = trips.filter(t =>
+                t.assignedTruck === truck.plate &&
+                compareDates(t.unloadDate, currentDate) <= 0
+            );
+
+            if (completedTrips.length === 0) return truck.location || ''; // No history
+
+            // Sort by unloadDate descending (latest first)
+            completedTrips.sort((a, b) => compareDates(b.unloadDate, a.unloadDate));
+            const lastCompletedTrip = completedTrips[0];
+
+            const calculatedLocation = lastCompletedTrip.destination;
+
+            // Update Truck State if new info
+            if (calculatedLocation) {
+                if (compareDates(currentDate, truck.locationLastUpdatedDate) >= 0 || truck.isLocationManual) {
+                    truck.location = calculatedLocation;
+                    truck.locationLastUpdatedDate = currentDate;
+                    truck.isLocationManual = false;
+
+                    // NEW: Auto-update zone if the trip has a Destination Zone
+                    if (lastCompletedTrip.destinationZone) {
+                        truck.zones = [lastCompletedTrip.destinationZone]; // Replacing zones
+                    }
+
+                    api.saveTruck(truck);
+                }
+                return calculatedLocation;
+            }
+            return truck.location || '';
+        }
+
+
 
         const api = {
             async getInitialData() {
@@ -890,7 +960,7 @@
                     ${palletSummaryHTML}
 
                     <div class="flex justify-center gap-1 mt-1 mb-0">
-                        ${ZONES.map(z => createZoneButton(plate, z, truck.zones)).join('')}
+                        ${ZONES.map(z => createZoneButton(truck.zones, z.name)).join('')}
                     </div>
                     <input type="text" 
                            placeholder="Ubicación"
@@ -968,6 +1038,48 @@
                 }
 
                 board.appendChild(row);
+            });
+        }
+
+        // Render Zone Counters (Top Statistics)
+        function renderZoneCounters(dateFilter) {
+            const container = document.getElementById('zone-counters');
+            container.innerHTML = '';
+
+            ZONES.forEach((zone) => {
+                // Count TRUCKS in this zone
+                const trucksInZone = trucks.filter(t =>
+                    isTruckActiveForDate(t, dateFilter) &&
+                    !isTruckOutOfService(t.plate, dateFilter) &&
+                    t.zones.includes(zone.name)
+                );
+
+                // Count PENDING TRIPS for this zone (Origin = Zone)
+                const pendingDeparture = trips.filter(t =>
+                    t.assignedTruck === null &&
+                    t.zone === zone.name &&
+                    t.type === 'departure' &&
+                    (!dateFilter || t.loadDate === dateFilter)
+                );
+
+                const pendingReturn = trips.filter(t =>
+                    t.assignedTruck === null &&
+                    t.zone === zone.name &&
+                    t.type === 'return' &&
+                    (!dateFilter || t.loadDate === dateFilter)
+                );
+
+                const div = document.createElement('div');
+                div.className = `flex flex-col items-center p-2 rounded border ${zone.color} bg-opacity-10 border-opacity-20`;
+                div.innerHTML = `
+                    <span class="text-xs font-bold text-slate-600 mb-1">${zone.code}</span>
+                    <div class="flex gap-2 text-[10px] font-mono">
+                        <span class="text-slate-500" title="Camiones Activos"><i class="fa-solid fa-truck"></i> ${trucksInZone.length}</span>
+                        <span class="text-red-500" title="Salidas Pendientes"><i class="fa-solid fa-arrow-right-from-bracket"></i> ${pendingDeparture.length}</span>
+                        <span class="text-green-500" title="Retornos Pendientes"><i class="fa-solid fa-arrow-right-to-bracket"></i> ${pendingReturn.length}</span>
+                    </div>
+                `;
+                container.appendChild(div);
             });
         }
 
@@ -1050,6 +1162,19 @@
         }
 
         // --- Funciones de Viajes y Drag/Drop ---
+
+        // Helper to render zone toggle buttons inside the truck row
+        function createZoneButton(activeList, zoneCode) {
+            const isActive = activeList.includes(zoneCode);
+            return `
+                <button disabled class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors
+                    ${isActive
+                    ? `bg-${ZONE_MAP[zoneCode].baseColor}-500 text-white shadow-sm ring-1 ring-${ZONE_MAP[zoneCode].baseColor}-600`
+                    : 'bg-slate-100 text-slate-300 border border-slate-200'}">
+                    ${zoneCode}
+                </button>
+            `;
+        }
 
         // MODIFIED: Added isFullHeight parameter
         function createTripCard(trip, isFullHeight = false) {
