@@ -709,7 +709,232 @@
             }
         }
 
-        // ... (helpers)
+        // --- Helpers Restorados ---
+
+        function getNextDay(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString + 'T00:00:00');
+            date.setDate(date.getDate() + 1);
+            return date.toISOString().split('T')[0];
+        }
+
+        function getPreviousDay(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString + 'T00:00:00');
+            date.setDate(date.getDate() - 1);
+            return date.toISOString().split('T')[0];
+        }
+
+        function saveData() { }
+
+        async function unassignAllTrips() {
+            const dateFilter = document.getElementById('dateFilter').value;
+            if (confirm(`¿Estás seguro de desasignar TODOS los viajes del día ${formatDate(dateFilter)}? Se moverán a Pendientes.`)) {
+                await api.unassignDay(dateFilter);
+                await loadData();
+            }
+        }
+
+        function isOverdue(dateString) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const loadDate = new Date(dateString);
+            loadDate.setHours(0, 0, 0, 0);
+            return loadDate < today;
+        }
+
+        function formatDate(str) {
+            if (!str) return '';
+            const d = new Date(str + 'T00:00:00');
+            return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+        }
+
+        // ==========================================
+        // 1.1 FUNCIONES DE UBICACIÓN AUTOMÁTICA
+        // ==========================================
+
+        function getTruckSuggestedLocation(truckPlate, currentDate, forceRecalculate = false) {
+            const truck = trucks.find(t => t.plate === truckPlate);
+            if (!truck) return '';
+            if (!forceRecalculate && truck.location && truck.location.trim() !== '') {
+                if (truck.isLocationManual && compareDates(truck.locationLastUpdatedDate, currentDate) === 0) {
+                    return truck.location;
+                }
+            }
+            let calculatedLocation = '';
+            let lastCompletedTrip = trips
+                .filter(t => t.assignedTruck === truckPlate && t.unloadDate && compareDates(t.unloadDate, currentDate) <= 0)
+                .sort((a, b) => compareDates(b.unloadDate, a.unloadDate))[0];
+            if (lastCompletedTrip && lastCompletedTrip.destination && lastCompletedTrip.destination.trim() !== '') {
+                calculatedLocation = lastCompletedTrip.destination;
+            } else {
+                if (compareDates(truck.locationLastUpdatedDate, OLD_DATE) === 0 && truck.location && truck.location.trim() !== '') {
+                    calculatedLocation = truck.location;
+                }
+            }
+            if (calculatedLocation) {
+                if (compareDates(currentDate, truck.locationLastUpdatedDate) >= 0 || truck.isLocationManual) {
+                    truck.location = calculatedLocation;
+                    truck.locationLastUpdatedDate = currentDate;
+                    truck.isLocationManual = false;
+                    saveData();
+                }
+                return calculatedLocation;
+            }
+            return truck.location || '';
+        }
+
+        function clearTruckPersistence(plate) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+            truck.location = '';
+            truck.locationLastUpdatedDate = OLD_DATE;
+            truck.isLocationManual = false;
+            saveData();
+        }
+
+        async function updateTruckLocation(plate, location) {
+            const truckIndex = trucks.findIndex(t => t.plate === plate);
+            if (truckIndex !== -1) {
+                const dateFilter = document.getElementById('dateFilter').value;
+                trucks[truckIndex].location = location;
+                trucks[truckIndex].locationLastUpdatedDate = dateFilter;
+                trucks[truckIndex].isLocationManual = true;
+                await api.saveTruck(trucks[truckIndex]);
+                renderAll();
+            }
+        }
+
+        // ==========================================
+        // 2. LÓGICA DE ZONAS, CAMIONES Y RENDER (RESTORADO)
+        // ==========================================
+
+        function renderZoneCounters(dateFilter) {
+            const counterDiv = document.getElementById('zone-counters');
+            if (!counterDiv) return; // Guard clause
+            counterDiv.innerHTML = '';
+            const activeTrips = trips.filter(t => t.loadDate === dateFilter);
+            const activeTrucks = trucks.filter(t => isTruckActiveForDate(t, dateFilter));
+            const zoneCounts = {};
+            ZONES.forEach(z => { zoneCounts[z.name] = { trucks: 0, trips: 0 }; });
+            activeTrucks.forEach(truck => {
+                truck.zones.forEach(zoneName => {
+                    if (zoneCounts[zoneName]) zoneCounts[zoneName].trucks++;
+                });
+            });
+            activeTrips.forEach(trip => {
+                if (trip.zone && zoneCounts[trip.zone]) zoneCounts[trip.zone].trips++;
+            });
+            ZONES.forEach(zone => {
+                const counts = zoneCounts[zone.name];
+                if (counts.trucks === 0 && counts.trips === 0) return;
+                const badge = document.createElement('div');
+                badge.className = `flex items-center p-1.5 rounded-md text-white shadow-sm text-xs font-bold ${zone.color}`;
+                badge.title = `${counts.trucks} camiones y ${counts.trips} viajes en ${zone.name}`;
+                badge.innerHTML = `${zone.code}: <span class="ml-1 px-1.5 rounded-full bg-white/30">${counts.trucks}T</span><span class="ml-1 px-1.5 rounded-full bg-white/50">${counts.trips}V</span>`;
+                counterDiv.appendChild(badge);
+            });
+        }
+
+        function isTruckActiveForDate(truck, dateFilter) {
+            const isCreated = compareDates(truck.creationDate, dateFilter) <= 0;
+            const isNotDeleted = truck.deletionDate === null || compareDates(truck.deletionDate, dateFilter) > 0;
+            return isCreated && isNotDeleted;
+        }
+
+        function toggleTruckZone(plate, zoneName) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+            if (!truck.zones) truck.zones = [];
+            const index = truck.zones.indexOf(zoneName);
+            if (index > -1) truck.zones.splice(index, 1);
+            else truck.zones.push(zoneName);
+            saveData();
+            renderAll();
+        }
+
+        function createZoneButton(plate, zone, activeZones) {
+            const isActive = activeZones.includes(zone.name);
+            const classes = isActive ? `text-white ${zone.color} shadow-lg hover:opacity-80` : `bg-slate-700/50 text-slate-400 hover:bg-slate-700`;
+            return `<button onclick="toggleTruckZone('${plate}', '${zone.name}'); event.stopPropagation();" class="text-[8px] font-bold p-0.5 rounded-full w-5 h-5 flex items-center justify-center transition ${classes}" title="Marcar ${zone.name}">${zone.code}</button>`;
+        }
+
+        async function addTruck() {
+            const plate = prompt("Introduce la nueva matrícula:");
+            const dateFilter = document.getElementById('dateFilter').value;
+            if (plate && plate.trim() !== "") {
+                const upperPlate = plate.toUpperCase().trim();
+                let existingTruck = trucks.find(t => t.plate === upperPlate);
+                if (existingTruck) {
+                    existingTruck.deletionDate = null;
+                    alert(`La matrícula ${upperPlate} ya existía en el historial. Ha sido reactivada a partir de hoy.`);
+                    await api.saveTruck(existingTruck);
+                } else {
+                    const newTruck = {
+                        plate: upperPlate,
+                        location: '',
+                        locationLastUpdatedDate: OLD_DATE,
+                        creationDate: dateFilter,
+                        deletionDate: null,
+                        zones: [],
+                        isLocationManual: false
+                    };
+                    trucks.push(newTruck);
+                    await api.saveTruck(newTruck);
+                }
+                await loadData();
+            }
+        }
+
+        async function deleteTruck(plate) {
+            const dateFilter = document.getElementById('dateFilter').value;
+            if (confirm(`¿Marcar camión ${plate} como ELIMINADO a partir del ${formatDate(dateFilter)}? Esto desasignará sus viajes de este día en adelante, pero mantendrá el historial anterior.`)) {
+                const truckIndex = trucks.findIndex(t => t.plate === plate);
+                if (truckIndex === -1) return;
+                trucks[truckIndex].deletionDate = dateFilter;
+                await api.saveTruck(trucks[truckIndex]);
+                const tripsToUpdate = [];
+                trips.forEach(t => {
+                    if (t.assignedTruck === plate && compareDates(t.loadDate, dateFilter) >= 0) {
+                        t.assignedTruck = null;
+                        t.assignedSlot = null;
+                        t.notifyTime = "";
+                        t.isNotified = false;
+                        tripsToUpdate.push(t);
+                    }
+                });
+                for (const t of tripsToUpdate) {
+                    await api.saveTrip(t);
+                }
+                await loadData();
+            }
+        }
+
+        async function toggleOutOfService(plate) {
+            const dateFilter = document.getElementById('dateFilter').value;
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+            if (!trucksFdsStatusByDate[plate]) trucksFdsStatusByDate[plate] = {};
+            const currentState = isTruckOutOfService(plate, dateFilter);
+            const newState = !currentState;
+            trucksFdsStatusByDate[plate][dateFilter] = newState;
+            if (newState) {
+                clearTruckPersistence(plate);
+                const tripsToUnassign = trips.filter(t => t.assignedTruck === plate && t.loadDate === dateFilter);
+                for (const t of tripsToUnassign) {
+                    t.assignedTruck = null;
+                    t.assignedSlot = null;
+                    t.notifyTime = "";
+                    t.isNotified = false;
+                    await api.saveTrip(t);
+                }
+                alert(`Camión ${plate} marcado como "Fuera de Servicio" para el día ${formatDate(dateFilter)}. Sus viajes han sido movidos a Pendientes.`);
+            } else {
+                alert(`Camión ${plate} vuelve a estar "En Servicio" para el día ${formatDate(dateFilter)}.`);
+            }
+            await api.toggleFds(plate, dateFilter, newState);
+            renderAll();
+        }
 
         function renderAll() {
             const dateFilter = document.getElementById('dateFilter').value;
@@ -1445,5 +1670,3 @@
 </body>
 
 </html>
-
-
