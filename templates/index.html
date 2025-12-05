@@ -1121,6 +1121,19 @@
 
         // --- Funciones de Viajes y Drag/Drop ---
 
+        // Helper to render zone toggle buttons inside the truck row
+        function createZoneButton(activeList, zoneCode) {
+            const isActive = activeList.includes(zoneCode);
+            return `
+                <button disabled class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors
+                    ${isActive
+                    ? `bg-${ZONE_MAP[zoneCode].baseColor}-500 text-white shadow-sm ring-1 ring-${ZONE_MAP[zoneCode].baseColor}-600`
+                    : 'bg-slate-100 text-slate-300 border border-slate-200'}">
+                    ${zoneCode}
+                </button>
+            `;
+        }
+
         // MODIFIED: Added isFullHeight parameter
         function createTripCard(trip, isFullHeight = false) {
             const div = document.createElement('div');
