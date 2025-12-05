@@ -58,8 +58,9 @@ class Truck(db.Model):
     creation_date = db.Column(db.String(20), nullable=False)
     deletion_date = db.Column(db.String(20), nullable=True)
     is_location_manual = db.Column(db.Boolean, default=False)
+    is_zone_manual = db.Column(db.Boolean, default=False) # NEW: Independent manual zone control
     zones_str = db.Column(db.String(200), default='')
-    manual_location = db.Column(db.String(100), default='') # NEW: Persist manual input
+    manual_location = db.Column(db.String(100), default='') 
 
     def to_dict(self):
         return {
@@ -69,12 +70,63 @@ class Truck(db.Model):
             'creationDate': self.creation_date,
             'deletionDate': self.deletion_date,
             'isLocationManual': self.is_location_manual,
+            'isZoneManual': self.is_zone_manual, # NEW
             'zones': self.zones_str.split(',') if self.zones_str else [],
-            'manualLocation': self.manual_location # NEW
+            'manualLocation': self.manual_location 
         }
 
 class Trip(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+
+# ...
+
+@app.before_request
+def init_db_on_first_request():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            inspector = db.inspect(db.engine)
+            # ...
+            
+            db.create_all()
+
+            # MIGRATION: Check for new columns
+            try:
+                # Check manual_location and is_zone_manual in truck
+                columns = [c['name'] for c in inspector.get_columns('truck')]
+                with db.engine.connect() as conn:
+                    if 'manual_location' not in columns:
+                        print("Migrando base de datos: Añadiendo manual_location a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN manual_location VARCHAR(100) DEFAULT ''"))
+                    if 'is_zone_manual' not in columns:
+                        print("Migrando base de datos: Añadiendo is_zone_manual a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN is_zone_manual BOOLEAN DEFAULT 0"))
+                    conn.commit()
+            except Exception as e:
+                print(f"Error checking/migrating schema: {e}")
+            
+            if not User.query.filter_by(username='davidp').first():
+
+# ...
+
+@app.route('/api/trucks', methods=['POST'])
+@login_required
+def save_truck():
+    d = request.json
+    t = Truck.query.filter_by(plate=d.get('plate')).first()
+    if not t:
+        t = Truck(plate=d.get('plate'))
+        db.session.add(t)
+    t.location = d.get('location', '')
+    t.location_last_updated = d.get('locationLastUpdatedDate', '2000-01-01')
+    t.creation_date = d.get('creationDate', '2000-01-01')
+    t.deletion_date = d.get('deletionDate')
+    t.is_location_manual = d.get('isLocationManual', False)
+    t.is_zone_manual = d.get('isZoneManual', False) # NEW
+    t.zones_str = ','.join(d.get('zones', []))
+    t.manual_location = d.get('manualLocation', '')
+    db.session.commit()
+    return jsonify(t.to_dict())
     type = db.Column(db.String(20), nullable=False) # 'departure', 'return'
     client = db.Column(db.String(100), nullable=False)
     driver = db.Column(db.String(100), default='')
