@@ -234,11 +234,12 @@ def index():
 def get_initial_data():
     trucks = [t.to_dict() for t in Truck.query.all()]
     trips = [t.to_dict() for t in Trip.query.all()]
-    fds = {}
-    for r in TruckFds.query.filter_by(is_out_of_service=True).all():
-        if r.truck_plate not in fds: fds[r.truck_plate] = {}
-        fds[r.truck_plate][r.date] = True
-    return jsonify({'trucks': trucks, 'trips': trips, 'fds_data': fds})
+    # Return all FDS events (both True and False) to reconstruct history
+    fds_records = [
+        {'plate': r.truck_plate, 'date': r.date, 'is_out_of_service': r.is_out_of_service} 
+        for r in TruckFds.query.all()
+    ]
+    return jsonify({'trucks': trucks, 'trips': trips, 'fds_data': fds_records})
 
 @app.route('/api/trucks', methods=['POST'])
 @login_required
@@ -278,7 +279,7 @@ def save_trip():
         t = Trip()
         db.session.add(t)
     
-    print(f"DEBUG: Guardando viaje. ID: {tid}, Datos: {d}")
+    # print(f"DEBUG: Guardando viaje. ID: {tid}, Datos: {d}")
     
     t.type = d.get('type')
     t.client = d.get('client')
@@ -303,7 +304,7 @@ def save_trip():
     t.is_notified = d.get('isNotified', False)
     
     db.session.commit()
-    print(f"DEBUG: Viaje guardado correctamente. ID: {t.id}")
+    # print(f"DEBUG: Viaje guardado correctamente. ID: {t.id}")
     return jsonify(t.to_dict())
 
 @app.route('/api/trips/<int:tid>', methods=['DELETE'])
@@ -335,10 +336,12 @@ def notes():
 def fds():
     d = request.json
     r = TruckFds.query.filter_by(truck_plate=d.get('plate'), date=d.get('date')).first()
-    if d.get('is_out_of_service'):
-        if not r: db.session.add(TruckFds(truck_plate=d.get('plate'), date=d.get('date'), is_out_of_service=True))
-        else: r.is_out_of_service = True
-    elif r: db.session.delete(r)
+    # Upsert logic: always save the state (True OR False), do not delete.
+    if not r:
+        db.session.add(TruckFds(truck_plate=d.get('plate'), date=d.get('date'), is_out_of_service=d.get('is_out_of_service')))
+    else:
+        r.is_out_of_service = d.get('is_out_of_service')
+        
     db.session.commit()
     return jsonify({'success': True})
 
