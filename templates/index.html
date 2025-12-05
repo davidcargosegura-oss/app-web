@@ -551,6 +551,14 @@
         }, {});
 
         // Helper to get Trip CR (Calculated Result/Ratio)
+
+        window.formatDate = function (dateStr) {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        };
+
         function getTripCR(trip) {
             const pg = (trip.pg || 0) * 1.0;
             const ep = (trip.ep || 0) * 0.8;
@@ -579,6 +587,8 @@
             const today = new Date().toISOString().split('T')[0];
             return compareDates(dateStr, today) < 0;
         }
+
+
 
         const api = {
             async getInitialData() {
