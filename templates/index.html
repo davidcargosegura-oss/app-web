@@ -547,6 +547,7 @@
         const api = {
             async getInitialData() {
                 const res = await fetch('/api/initial-data');
+                if (!res.ok) throw new Error(await res.text());
                 return await res.json();
             },
             async saveTruck(truck) {
@@ -555,10 +556,12 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(truck)
                 });
+                if (!res.ok) throw new Error(await res.text());
                 return await res.json();
             },
             async deleteTruck(plate) {
-                await fetch(`/api/trucks/${plate}`, { method: 'DELETE' });
+                const res = await fetch(`/api/trucks/${plate}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(await res.text());
             },
             async saveTrip(trip) {
                 const res = await fetch('/api/trips', {
@@ -566,31 +569,36 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(trip)
                 });
+                if (!res.ok) throw new Error(await res.text());
                 return await res.json();
             },
             async deleteTrip(id) {
-                await fetch(`/api/trips/${id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/trips/${id}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(await res.text());
             },
             async saveNote(date, type, content) {
-                await fetch('/api/notes', {
+                const res = await fetch('/api/notes', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ date, type, content })
                 });
+                if (!res.ok) throw new Error(await res.text());
             },
             async toggleFds(plate, date, isOutOfService) {
-                await fetch('/api/fds', {
+                const res = await fetch('/api/fds', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ plate, date, is_out_of_service: isOutOfService })
                 });
+                if (!res.ok) throw new Error(await res.text());
             },
             async unassignDay(date) {
-                await fetch('/api/unassign-day', {
+                const res = await fetch('/api/unassign-day', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ date })
                 });
+                if (!res.ok) throw new Error(await res.text());
             }
         };
 
@@ -1500,89 +1508,6 @@
 
         function closeModal() {
             document.getElementById('modal').classList.add('hidden');
-            document.getElementById('tripForm').reset();
-        }
-
-        async function saveTrip(e) {
-            e.preventDefault();
-            const idToEdit = document.getElementById('editTripId').value;
-            const selectedType = document.querySelector('input[name="tripType"]:checked').value;
-            const isUrgentChecked = document.getElementById('isUrgent').checked;
-            const isGroupageChecked = document.getElementById('isGroupage').checked;
-            const selectedZoneEl = document.querySelector('input[name="tripZone"]:checked');
-            const tripZone = selectedZoneEl ? selectedZoneEl.value : null;
-
-            const loadDate = document.getElementById('loadDate').value;
-            const unloadDate = document.getElementById('unloadDate').value;
-
-            if (compareDates(loadDate, unloadDate) > 0) {
-                alert("¡Error! La Fecha de Descarga no puede ser anterior a la Fecha de Carga.");
-                return;
-            }
-
-            if (!tripZone) {
-                alert("Por favor, selecciona una Zona para el Viaje.");
-                return;
-            }
-
-            const tripData = {
-                type: selectedType,
-                client: document.getElementById('client').value,
-                driver: document.getElementById('driver').value,
-                origin: document.getElementById('origin').value,
-                destination: document.getElementById('destination').value,
-                loadDate: loadDate,
-                unloadDate: unloadDate,
-                isUrgent: isUrgentChecked,
-                isGroupage: isGroupageChecked,
-                zone: tripZone,
-                pg: parseInt(document.getElementById('pg').value) || 0,
-                ep: parseInt(document.getElementById('ep').value) || 0,
-                pp: parseInt(document.getElementById('pp').value) || 0
-            };
-
-            // Check if at least one pallet count is entered, but ONLY IF it's a groupage trip
-            if (isGroupageChecked && tripData.pg === 0 && tripData.ep === 0 && tripData.pp === 0) {
-                if (!confirm("ADVERTENCIA: El viaje está marcado como GRUPAJE pero no se ha introducido ninguna cantidad de palets. ¿Deseas guardar el viaje?")) {
-                    return;
-                }
-            }
-
-
-            if (idToEdit) {
-                // Editing existing trip
-                const tripIndex = trips.findIndex(t => t.id === parseInt(idToEdit));
-                if (tripIndex !== -1) {
-                    const existingTrip = trips[tripIndex];
-                    // Clean previous assignment persistence if applicable
-                    if (existingTrip.assignedTruck) {
-                        clearTruckPersistence(existingTrip.assignedTruck);
-                    }
-
-                    const updatedTrip = { ...existingTrip, ...tripData };
-                    await api.saveTrip(updatedTrip);
-                }
-            } else {
-                // New Trip
-                // ID will be assigned by backend potentially, but we send 0 or null?
-                // The API endpoint handles ID generation if not provided or if not found.
-                // But wait, my API endpoint `save_trip` checks for `id` in JSON. 
-                // If I send NO id, it creates new.
-
-                // Let's check api implementation.
-                // It says: trip_id = data.get('id'); trip = Trip.query.get(trip_id) if trip_id else None; if not trip: trip = Trip()...
-                // So if I send data without ID, it creates new. perfectly.
-
-                await api.saveTrip(tripData);
-            }
-
-            await loadData();
-            closeModal();
-        }
-
-        async function deleteTrip() {
-            const idToDelete = parseInt(document.getElementById('editTripId').value);
-            const trip = trips.find(t => t.id === idToDelete);
 
             if (confirm(`¿Estás seguro de eliminar el viaje?`)) {
 
