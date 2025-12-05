@@ -616,6 +616,44 @@
             }
         }
 
+        async function addTruck() {
+            const plate = prompt("Introduce la matrícula del nuevo camión:");
+            if (!plate) return;
+
+            // Basic validation
+            if (trucks.some(t => t.plate === plate)) {
+                alert("Ya existe un camión con esta matrícula.");
+                return;
+            }
+
+            const newTruck = {
+                plate: plate.toUpperCase(),
+                location: '',
+                zones: [], // Empty by default
+                creationDate: new Date().toISOString().split('T')[0]
+            };
+
+            try {
+                await api.saveTruck(newTruck);
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert("Error creando camión: " + error.message);
+            }
+        }
+
+        async function deleteTruck(plate) {
+            if (!confirm(`¿Estás seguro de ELIMINAR el camión ${plate}? Esta acción borrará su historial de viajes y es irreversible.`)) return;
+
+            try {
+                await api.deleteTruck(plate);
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert("Error eliminando camión: " + error.message);
+            }
+        }
+
         function getTruckSuggestedLocation(truck, currentDate, forceRecalculate = false) {
             // 1. If manual override is active for this day/logic... (implied by isLocationManual flag check below)
 
@@ -921,7 +959,7 @@
                 const row = document.createElement('div');
                 row.className = rowClass;
 
-                const displayLocation = getTruckSuggestedLocation(plate, dateFilter);
+                const displayLocation = getTruckSuggestedLocation(truck, dateFilter);
 
                 const totalTruckCR = assignedTrips.reduce((sum, t) => sum + getTripCR(t), 0);
                 const formattedTruckCR = (Math.round(totalTruckCR * 10) / 10).toFixed(1);
@@ -960,7 +998,7 @@
                     ${palletSummaryHTML}
 
                     <div class="flex justify-center gap-1 mt-1 mb-0">
-                        ${ZONES.map(z => createZoneButton(truck.zones, z.name)).join('')}
+                        ${ZONES.map(z => createZoneButton(truck.zones, z, truck.plate)).join('')}
                     </div>
                     <input type="text" 
                            placeholder="Ubicación"
@@ -1164,14 +1202,16 @@
         // --- Funciones de Viajes y Drag/Drop ---
 
         // Helper to render zone toggle buttons inside the truck row
-        function createZoneButton(activeList, zoneCode) {
-            const isActive = activeList.includes(zoneCode);
+        function createZoneButton(activeList, zone, truckPlate) {
+            // activeList contains names (e.g. 'Murcia'), we display code (e.g. 'MU')
+            const isActive = activeList.includes(zone.name);
             return `
-                <button disabled class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors
+                <button onclick="toggleZone('${truckPlate}', '${zone.name}')" 
+                    class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors cursor-pointer
                     ${isActive
-                    ? `bg-${ZONE_MAP[zoneCode].baseColor}-500 text-white shadow-sm ring-1 ring-${ZONE_MAP[zoneCode].baseColor}-600`
-                    : 'bg-slate-100 text-slate-300 border border-slate-200'}">
-                    ${zoneCode}
+                    ? `bg-${zone.baseColor}-500 text-white shadow-sm ring-1 ring-${zone.baseColor}-600`
+                    : 'bg-slate-100 text-slate-300 border border-slate-200 hover:bg-slate-200'}">
+                    ${zone.code}
                 </button>
             `;
         }
