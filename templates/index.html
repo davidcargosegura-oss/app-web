@@ -657,6 +657,28 @@
             }
         }
 
+        async function toggleZone(plate, zoneName) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+
+            const hasZone = truck.zones.includes(zoneName);
+            if (hasZone) {
+                truck.zones = truck.zones.filter(z => z !== zoneName);
+            } else {
+                truck.zones.push(zoneName);
+            }
+            // Mark manually modified so auto-logic doesn't immediately revert it
+            truck.isLocationManual = true;
+
+            try {
+                await api.saveTruck(truck);
+                await loadData(); // Re-render to show correct button state
+            } catch (error) {
+                console.error(error);
+                alert("Error actualizando zona: " + error.message);
+            }
+        }
+
         function getTruckSuggestedLocation(truck, currentDate, forceRecalculate = false) {
             // 1. If manual override is active for this day/logic... (implied by isLocationManual flag check below)
 
@@ -685,8 +707,25 @@
                     truck.isLocationManual = false;
 
                     // NEW: Auto-update zone if the trip has a Destination Zone
+                    // IMPROVED: Revert logic. If fallback trip has dest zone, use it. If not, Clear zones?
+                    // User complained "it doesn't go back". 
+                    // If we treat "no destination zone" as "unknown", maybe we should clear.
+                    // But if the trip was "Madrid -> Valencia", and Valencia has Zone VA.
+                    // Then we did "Valencia -> Murcia" (Zone MU).
+                    // Unassign Murcia. Fallback to Valencia.
+                    // If Valencia trip has Zone VA, we set VA.
+                    // If Valencia trip has NO zone, we should probably set NO zone (empty).
+                    // This ensures we fully "revert" to the previous trip's state.
+
                     if (lastCompletedTrip.destinationZone) {
-                        truck.zones = [lastCompletedTrip.destinationZone]; // Replacing zones
+                        truck.zones = [lastCompletedTrip.destinationZone];
+                    } else {
+                        // Option: Empty the zones if the fallback trip doesn't specify one.
+                        // check if the destination implies a zone? 
+                        // For now, let's just NOT Clear, in case manual was set? 
+                        // But wait, if we are in "Auto" mode (calculatedLocation found), we usually overwrite manual.
+                        // Let's force clear if no zone, to ensure cleanup.
+                        truck.zones = [];
                     }
 
                     api.saveTruck(truck);
