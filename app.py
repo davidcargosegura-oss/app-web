@@ -77,6 +77,51 @@ class Truck(db.Model):
 
 class Trip(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    type = db.Column(db.String(20), nullable=False) # 'departure', 'return'
+    client = db.Column(db.String(100), nullable=False)
+    driver = db.Column(db.String(100), default='')
+    origin = db.Column(db.String(100), nullable=False)
+    destination = db.Column(db.String(100), nullable=False)
+    destination_zone = db.Column(db.String(50), nullable=True) # NEW: Destination Zone
+    load_date = db.Column(db.String(20), nullable=False)
+    unload_date = db.Column(db.String(20), nullable=False)
+    
+    assigned_truck_plate = db.Column(db.String(20), db.ForeignKey('truck.plate'), nullable=True)
+    assigned_slot = db.Column(db.Integer, nullable=True)
+    
+    is_urgent = db.Column(db.Boolean, default=False)
+    is_groupage = db.Column(db.Boolean, default=False)
+    zone = db.Column(db.String(50), nullable=True)
+    
+    pg = db.Column(db.Integer, default=0)
+    ep = db.Column(db.Integer, default=0)
+    pp = db.Column(db.Integer, default=0)
+    
+    notify_time = db.Column(db.String(20), default="")
+    is_notified = db.Column(db.Boolean, default=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'type': self.type,
+            'client': self.client,
+            'driver': self.driver,
+            'origin': self.origin,
+            'destination': self.destination,
+            'destinationZone': self.destination_zone,
+            'loadDate': self.load_date,
+            'unloadDate': self.unload_date,
+            'assignedTruck': self.assigned_truck_plate,
+            'assignedSlot': self.assigned_slot,
+            'isUrgent': self.is_urgent,
+            'isGroupage': self.is_groupage,
+            'zone': self.zone,
+            'pg': self.pg,
+            'ep': self.ep,
+            'pp': self.pp,
+            'notifyTime': self.notify_time,
+            'isNotified': self.is_notified
+        }
 
 # ...
 
@@ -106,8 +151,16 @@ def init_db_on_first_request():
                 print(f"Error checking/migrating schema: {e}")
             
             if not User.query.filter_by(username='davidp').first():
-
-# ...
+                u = User(username='davidp', is_admin=True)
+                u.set_password('admin')
+                db.session.add(u)
+                db.session.commit()
+                print("Admin 'davidp' creado.")
+            
+            _db_initialized = True
+            print("Base de datos inicializada correctamente.")
+        except Exception as e:
+            print(f"Error inicializando base de datos: {e}")
 
 @app.route('/api/trucks', methods=['POST'])
 @login_required
@@ -127,30 +180,7 @@ def save_truck():
     t.manual_location = d.get('manualLocation', '')
     db.session.commit()
     return jsonify(t.to_dict())
-    type = db.Column(db.String(20), nullable=False) # 'departure', 'return'
-    client = db.Column(db.String(100), nullable=False)
-    driver = db.Column(db.String(100), default='')
-    origin = db.Column(db.String(100), nullable=False)
-    destination = db.Column(db.String(100), nullable=False)
-    destination_zone = db.Column(db.String(50), nullable=True) # NEW: Destination Zone
-    load_date = db.Column(db.String(20), nullable=False)
-    unload_date = db.Column(db.String(20), nullable=False)
-    
-    assigned_truck_plate = db.Column(db.String(20), db.ForeignKey('truck.plate'), nullable=True)
-    assigned_slot = db.Column(db.Integer, nullable=True)
-    
-    is_urgent = db.Column(db.Boolean, default=False)
-    is_groupage = db.Column(db.Boolean, default=False)
-    zone = db.Column(db.String(50), nullable=True)
-    
-    pg = db.Column(db.Integer, default=0)
-    ep = db.Column(db.Integer, default=0)
-    pp = db.Column(db.Integer, default=0)
-    
-    notify_time = db.Column(db.String(20), default="")
-    is_notified = db.Column(db.Boolean, default=False)
 
-    assigned_truck = db.relationship('Truck', backref=db.backref('trips', lazy=True))
 
     def to_dict(self):
         return {
