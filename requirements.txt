@@ -3,4 +3,5 @@ Flask-SQLAlchemy
 Flask-Login
 Flask-Admin
 Werkzeug
-gunicorn # ¡Añadido!
+gunicorn
+psycopg2-binary
