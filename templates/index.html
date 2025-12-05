@@ -702,317 +702,288 @@
             // Update Truck State if new info
             if (calculatedLocation) {
                 if (compareDates(currentDate, truck.locationLastUpdatedDate) >= 0 || truck.isLocationManual) {
-                    truck.location = calculatedLocation;
-                    truck.locationLastUpdatedDate = currentDate;
-                    truck.isLocationManual = false;
+                }
+                return truck.location || '';
+            }
 
-                    // NEW: Auto-update zone if the trip has a Destination Zone
-                    // IMPROVED: Revert logic. If fallback trip has dest zone, use it. If not, Clear zones?
-                    // User complained "it doesn't go back". 
-                    // If we treat "no destination zone" as "unknown", maybe we should clear.
-                    // But if the trip was "Madrid -> Valencia", and Valencia has Zone VA.
-                    // Then we did "Valencia -> Murcia" (Zone MU).
-                    // Unassign Murcia. Fallback to Valencia.
-                    // If Valencia trip has Zone VA, we set VA.
-                    // If Valencia trip has NO zone, we should probably set NO zone (empty).
-                    // This ensures we fully "revert" to the previous trip's state.
 
-                    if (lastCompletedTrip.destinationZone) {
-                        truck.zones = [lastCompletedTrip.destinationZone];
-                    } else {
-                        // Option: Empty the zones if the fallback trip doesn't specify one.
-                        // check if the destination implies a zone? 
-                        // For now, let's just NOT Clear, in case manual was set? 
-                        // But wait, if we are in "Auto" mode (calculatedLocation found), we usually overwrite manual.
-                        // Let's force clear if no zone, to ensure cleanup.
-                        truck.zones = [];
+
+            const api = {
+                async getInitialData() {
+                    const res = await fetch('/api/initial-data');
+                    if (!res.ok) throw new Error(await res.text());
+                    return await res.json();
+                },
+                async saveTruck(truck) {
+                    const res = await fetch('/api/trucks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(truck)
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                    return await res.json();
+                },
+                async deleteTruck(plate) {
+                    const res = await fetch(`/api/trucks/${plate}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error(await res.text());
+                },
+                async saveTrip(trip) {
+                    const res = await fetch('/api/trips', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(trip)
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                    return await res.json();
+                },
+                async deleteTrip(id) {
+                    const res = await fetch(`/api/trips/${id}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error(await res.text());
+                },
+                async saveNote(date, type, content) {
+                    const res = await fetch('/api/notes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date, type, content })
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                },
+                async toggleFds(plate, date, isOutOfService) {
+                    const res = await fetch('/api/fds', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ plate, date, is_out_of_service: isOutOfService })
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                },
+                async unassignDay(date) {
+                    const res = await fetch('/api/unassign-day', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date })
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                }
+            };
+
+            // --- REPLACED LOCAL STORAGE LOGIC WITH API STUBS ---
+            // Note: We maintain local functions for compatibility but they now wrap API calls or do nothing if centralized.
+
+            function getFdsKey() { return '' }
+            function saveFdsData() { /* Now handled via api.toggleFds per action */ }
+            function loadFdsData() { /* Loaded via getInitialData */ }
+
+            function isTruckOutOfService(plate, date) {
+                return trucksFdsStatusByDate[plate] && trucksFdsStatusByDate[plate][date] === true;
+            }
+
+            function getNotesKey(date, type = 'General') { return '' }
+
+            // Debounce for notes to avoid spamming API onInput
+            let noteTimeout;
+            function saveNotesForSelectedDate(type) {
+                const date = document.getElementById('dateFilter').value;
+                const elementId = `dailyNotes_${type}`;
+                const content = document.getElementById(elementId).value;
+
+                clearTimeout(noteTimeout);
+                noteTimeout = setTimeout(() => {
+                    api.saveNote(date, type, content);
+                }, 1000);
+            }
+
+            async function loadNotesForSelectedDate() {
+                const date = document.getElementById('dateFilter').value;
+                const noteTypes = ['Tasks', 'Incidents', 'General'];
+
+                for (const type of noteTypes) {
+                    const element = document.getElementById(`dailyNotes_${type}`);
+                    // Since this is async, we fetch each. Ideally we'd fetch all at once, 
+                    // but let's keep it simple for now or fetch individual. 
+                    // Optimization: The initial load gets everything? No, notes are by date.
+                    // We'll fetch individually on date change.
+                    if (element) {
+                        try {
+                            const res = await fetch(`/api/notes?date=${date}&type=${type}`);
+                            const data = await res.json();
+                            element.value = data.content || '';
+                        } catch (e) { console.error(e); }
+                    }
+                }
+            }
+
+            // Global variable to store FDS history: { 'PLATE': [ {date:'YYYY-MM-DD', is_out_of_service: true/false}, ... ] }
+            let trucksFdsHistory = {};
+
+            async function loadData() {
+                try {
+                    const data = await api.getInitialData();
+                    trucks = data.trucks || [];
+                    trips = data.trips || [];
+
+                    // Process FDS history
+                    trucksFdsHistory = {};
+                    const fdsRecords = data.fds_data || [];
+                    fdsRecords.forEach(r => {
+                        if (!trucksFdsHistory[r.plate]) trucksFdsHistory[r.plate] = [];
+                        trucksFdsHistory[r.plate].push(r);
+                    });
+                    // Sort history by date descending for easier lookup
+                    Object.keys(trucksFdsHistory).forEach(plate => {
+                        trucksFdsHistory[plate].sort((a, b) => compareDates(b.date, a.date)); // Latest first
+                    });
+
+                    console.log("Datos cargados:", { trucks: trucks.length, trips: trips.length, fdsEvents: fdsRecords.length });
+
+                    // Ensure default date
+                    const dateFilterElement = document.getElementById('dateFilter');
+                    if (!dateFilterElement.value) {
+                        dateFilterElement.value = new Date().toISOString().split('T')[0];
                     }
 
-                    api.saveTruck(truck);
-                }
-                return calculatedLocation;
-            }
-            return truck.location || '';
-        }
+                    console.log("Fecha filtro:", dateFilterElement.value);
 
+                    // Zone filter logic...
+                    const zoneFilterEl = document.getElementById('zoneFilter');
+                    if (zoneFilterEl.options.length <= 1) {
+                        ZONES.forEach(z => {
+                            const option = document.createElement('option');
+                            option.value = z.name;
+                            option.textContent = z.name;
+                            zoneFilterEl.appendChild(option);
+                        });
+                    }
 
+                    loadNotesForSelectedDate();
+                    renderAll();
 
-        const api = {
-            async getInitialData() {
-                const res = await fetch('/api/initial-data');
-                if (!res.ok) throw new Error(await res.text());
-                return await res.json();
-            },
-            async saveTruck(truck) {
-                const res = await fetch('/api/trucks', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(truck)
-                });
-                if (!res.ok) throw new Error(await res.text());
-                return await res.json();
-            },
-            async deleteTruck(plate) {
-                const res = await fetch(`/api/trucks/${plate}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error(await res.text());
-            },
-            async saveTrip(trip) {
-                const res = await fetch('/api/trips', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(trip)
-                });
-                if (!res.ok) throw new Error(await res.text());
-                return await res.json();
-            },
-            async deleteTrip(id) {
-                const res = await fetch(`/api/trips/${id}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error(await res.text());
-            },
-            async saveNote(date, type, content) {
-                const res = await fetch('/api/notes', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date, type, content })
-                });
-                if (!res.ok) throw new Error(await res.text());
-            },
-            async toggleFds(plate, date, isOutOfService) {
-                const res = await fetch('/api/fds', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ plate, date, is_out_of_service: isOutOfService })
-                });
-                if (!res.ok) throw new Error(await res.text());
-            },
-            async unassignDay(date) {
-                const res = await fetch('/api/unassign-day', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date })
-                });
-                if (!res.ok) throw new Error(await res.text());
-            }
-        };
-
-        // --- REPLACED LOCAL STORAGE LOGIC WITH API STUBS ---
-        // Note: We maintain local functions for compatibility but they now wrap API calls or do nothing if centralized.
-
-        function getFdsKey() { return '' }
-        function saveFdsData() { /* Now handled via api.toggleFds per action */ }
-        function loadFdsData() { /* Loaded via getInitialData */ }
-
-        function isTruckOutOfService(plate, date) {
-            return trucksFdsStatusByDate[plate] && trucksFdsStatusByDate[plate][date] === true;
-        }
-
-        function getNotesKey(date, type = 'General') { return '' }
-
-        // Debounce for notes to avoid spamming API onInput
-        let noteTimeout;
-        function saveNotesForSelectedDate(type) {
-            const date = document.getElementById('dateFilter').value;
-            const elementId = `dailyNotes_${type}`;
-            const content = document.getElementById(elementId).value;
-
-            clearTimeout(noteTimeout);
-            noteTimeout = setTimeout(() => {
-                api.saveNote(date, type, content);
-            }, 1000);
-        }
-
-        async function loadNotesForSelectedDate() {
-            const date = document.getElementById('dateFilter').value;
-            const noteTypes = ['Tasks', 'Incidents', 'General'];
-
-            for (const type of noteTypes) {
-                const element = document.getElementById(`dailyNotes_${type}`);
-                // Since this is async, we fetch each. Ideally we'd fetch all at once, 
-                // but let's keep it simple for now or fetch individual. 
-                // Optimization: The initial load gets everything? No, notes are by date.
-                // We'll fetch individually on date change.
-                if (element) {
-                    try {
-                        const res = await fetch(`/api/notes?date=${date}&type=${type}`);
-                        const data = await res.json();
-                        element.value = data.content || '';
-                    } catch (e) { console.error(e); }
+                } catch (error) {
+                    console.error("Error loading data:", error);
+                    alert("Error cargando datos del servidor. Ver consola.");
                 }
             }
-        }
 
-        // Global variable to store FDS history: { 'PLATE': [ {date:'YYYY-MM-DD', is_out_of_service: true/false}, ... ] }
-        let trucksFdsHistory = {};
+            // ... helpers ...
 
-        async function loadData() {
-            try {
-                const data = await api.getInitialData();
-                trucks = data.trucks || [];
-                trips = data.trips || [];
+            function isTruckOutOfService(plate, date) {
+                const history = trucksFdsHistory[plate];
+                if (!history || history.length === 0) return false;
 
-                // Process FDS history
-                trucksFdsHistory = {};
-                const fdsRecords = data.fds_data || [];
-                fdsRecords.forEach(r => {
-                    if (!trucksFdsHistory[r.plate]) trucksFdsHistory[r.plate] = [];
-                    trucksFdsHistory[r.plate].push(r);
+                // Find the latest event that happened ON or BEFORE the target date
+                // Since history is sorted descending (latest first), we just find the first one <= date
+                const latestEvent = history.find(e => compareDates(e.date, date) <= 0);
+
+                return latestEvent ? latestEvent.is_out_of_service : false;
+            }
+
+            async function toggleOutOfService(plate) {
+                const dateFilter = document.getElementById('dateFilter').value;
+                const truck = trucks.find(t => t.plate === plate);
+                if (!truck) return;
+
+                const currentState = isTruckOutOfService(plate, dateFilter);
+                const newState = !currentState; // Toggle state
+
+                // Logic for visual feedback and unassignment
+                if (newState) {
+                    clearTruckPersistence(plate);
+                    const tripsToUnassign = trips.filter(t => t.assignedTruck === plate && t.loadDate === dateFilter);
+                    for (const t of tripsToUnassign) {
+                        t.assignedTruck = null;
+                        t.assignedSlot = null;
+                        t.notifyTime = "";
+                        t.isNotified = false;
+                        await api.saveTrip(t);
+                    }
+                    alert(`Camión ${plate} marcado como "Fuera de Servicio" a partir del ${formatDate(dateFilter)}. Sus viajes DE HOY han sido movidos a Pendientes.`);
+                } else {
+                    alert(`Camión ${plate} marcado como "En Servicio" a partir del ${formatDate(dateFilter)}.`);
+                }
+
+                await api.toggleFds(plate, dateFilter, newState);
+                await loadData(); // Reload to refresh history and rendering
+            }
+
+            function renderAll() {
+                const dateFilter = document.getElementById('dateFilter').value;
+                console.log("Renderizando Todo para:", dateFilter);
+                renderUnassigned(dateFilter);
+                renderPlanning(dateFilter);
+                renderZoneCounters(dateFilter);
+            }
+
+            // ...
+
+            function renderPlanning(dateFilter) {
+                const board = document.getElementById('planning-board');
+                board.innerHTML = '';
+
+                const selectedZoneFilter = document.getElementById('zoneFilter').value;
+
+                // Debug logic
+                trucks.forEach(t => {
+                    const isActive = isTruckActiveForDate(t, dateFilter);
+                    if (t.plate === 'TEST' || isActive) { // Log filtered set or specific debug
+                        // console.log(`Camión ${t.plate}: Creado ${t.creationDate}, Filtro ${dateFilter}, Activo? ${isActive}`);
+                    }
                 });
-                // Sort history by date descending for easier lookup
-                Object.keys(trucksFdsHistory).forEach(plate => {
-                    trucksFdsHistory[plate].sort((a, b) => compareDates(b.date, a.date)); // Latest first
-                });
 
-                console.log("Datos cargados:", { trucks: trucks.length, trips: trips.length, fdsEvents: fdsRecords.length });
+                let activeTrucks = trucks.filter(t => isTruckActiveForDate(t, dateFilter));
+                console.log(`Camiones activos hoy (${dateFilter}): ${activeTrucks.length} de ${trucks.length}`);
 
-                // Ensure default date
-                const dateFilterElement = document.getElementById('dateFilter');
-                if (!dateFilterElement.value) {
-                    dateFilterElement.value = new Date().toISOString().split('T')[0];
+                if (selectedZoneFilter !== 'ALL') {
+                    activeTrucks = activeTrucks.filter(t => t.zones.includes(selectedZoneFilter));
                 }
 
-                console.log("Fecha filtro:", dateFilterElement.value);
+                // ... (rest of function)
 
-                // Zone filter logic...
-                const zoneFilterEl = document.getElementById('zoneFilter');
-                if (zoneFilterEl.options.length <= 1) {
-                    ZONES.forEach(z => {
-                        const option = document.createElement('option');
-                        option.value = z.name;
-                        option.textContent = z.name;
-                        zoneFilterEl.appendChild(option);
-                    });
-                }
+                const inServiceTrucks = activeTrucks.filter(t => !isTruckOutOfService(t.plate, dateFilter)).sort((a, b) => a.plate.localeCompare(b.plate));
+                const outOfServiceTrucks = activeTrucks.filter(t => isTruckOutOfService(t.plate, dateFilter));
+                const sortedTrucks = [...inServiceTrucks, ...outOfServiceTrucks];
 
-                loadNotesForSelectedDate();
-                renderAll();
+                sortedTrucks.forEach(truck => {
+                    const plate = truck.plate;
+                    const isOutOfService = isTruckOutOfService(plate, dateFilter);
 
-            } catch (error) {
-                console.error("Error loading data:", error);
-                alert("Error cargando datos del servidor. Ver consola.");
-            }
-        }
+                    const firstZone = truck.zones.length > 0 ? ZONE_MAP[truck.zones[0]] : null;
+                    // Nota: Tailwind necesita clases completas en el CSS estático para funcionar. Si no lo has definido en el style, puede fallar aquí. Usaremos un fallback a slate.
+                    const baseColor = firstZone ? firstZone.baseColor : 'slate';
 
-        // ... helpers ...
+                    // NEW: Calculate assigned trips and determine the required min-height
+                    const assignedTrips = trips.filter(t =>
+                        t.assignedTruck === plate &&
+                        t.loadDate === dateFilter
+                    );
 
-        function isTruckOutOfService(plate, date) {
-            const history = trucksFdsHistory[plate];
-            if (!history || history.length === 0) return false;
+                    const hasAssignedTripsToday = assignedTrips.length > 0;
+                    const hasGroupageAssigned = assignedTrips.some(t => t.isGroupage === true);
 
-            // Find the latest event that happened ON or BEFORE the target date
-            // Since history is sorted descending (latest first), we just find the first one <= date
-            const latestEvent = history.find(e => compareDates(e.date, date) <= 0);
+                    // Base height for the row. Min-height: Reduced for ultra-compact. 96px (6rem) if trips assigned, 80px (5rem) if no trips.
+                    const baseMinHeight = hasAssignedTripsToday ? 'min-h-[6rem]' : 'min-h-[5rem]';
 
-            return latestEvent ? latestEvent.is_out_of_service : false;
-        }
+                    const rowClass = isOutOfService
+                        ? `grid grid-cols-[140px_1fr_1fr_1fr_1fr] gap-2 p-2 rounded border-4 border-red-500 bg-red-50/50 items-stretch ${baseMinHeight} hover:shadow-xl transition-shadow truck-out-of-service`
+                        : `grid grid-cols-[140px_1fr_1fr_1fr_1fr] gap-2 bg-white p-2 rounded border border-slate-200 items-stretch ${baseMinHeight} hover:shadow-md transition-shadow`;
 
-        async function toggleOutOfService(plate) {
-            const dateFilter = document.getElementById('dateFilter').value;
-            const truck = trucks.find(t => t.plate === plate);
-            if (!truck) return;
+                    const plateBgClass = isOutOfService
+                        ? 'bg-red-700'
+                        : `bg-${baseColor}-800`;
 
-            const currentState = isTruckOutOfService(plate, dateFilter);
-            const newState = !currentState; // Toggle state
+                    const row = document.createElement('div');
+                    row.className = rowClass;
 
-            // Logic for visual feedback and unassignment
-            if (newState) {
-                clearTruckPersistence(plate);
-                const tripsToUnassign = trips.filter(t => t.assignedTruck === plate && t.loadDate === dateFilter);
-                for (const t of tripsToUnassign) {
-                    t.assignedTruck = null;
-                    t.assignedSlot = null;
-                    t.notifyTime = "";
-                    t.isNotified = false;
-                    await api.saveTrip(t);
-                }
-                alert(`Camión ${plate} marcado como "Fuera de Servicio" a partir del ${formatDate(dateFilter)}. Sus viajes DE HOY han sido movidos a Pendientes.`);
-            } else {
-                alert(`Camión ${plate} marcado como "En Servicio" a partir del ${formatDate(dateFilter)}.`);
-            }
+                    const displayLocation = getTruckSuggestedLocation(truck, dateFilter);
 
-            await api.toggleFds(plate, dateFilter, newState);
-            await loadData(); // Reload to refresh history and rendering
-        }
+                    const totalTruckCR = assignedTrips.reduce((sum, t) => sum + getTripCR(t), 0);
+                    const formattedTruckCR = (Math.round(totalTruckCR * 10) / 10).toFixed(1);
+                    const totalTruckPG = assignedTrips.reduce((sum, t) => sum + (t.pg || 0), 0);
+                    const totalTruckEP = assignedTrips.reduce((sum, t) => sum + (t.ep || 0), 0);
+                    const totalTruckPP = assignedTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
 
-        function renderAll() {
-            const dateFilter = document.getElementById('dateFilter').value;
-            console.log("Renderizando Todo para:", dateFilter);
-            renderUnassigned(dateFilter);
-            renderPlanning(dateFilter);
-            renderZoneCounters(dateFilter);
-        }
-
-        // ...
-
-        function renderPlanning(dateFilter) {
-            const board = document.getElementById('planning-board');
-            board.innerHTML = '';
-
-            const selectedZoneFilter = document.getElementById('zoneFilter').value;
-
-            // Debug logic
-            trucks.forEach(t => {
-                const isActive = isTruckActiveForDate(t, dateFilter);
-                if (t.plate === 'TEST' || isActive) { // Log filtered set or specific debug
-                    // console.log(`Camión ${t.plate}: Creado ${t.creationDate}, Filtro ${dateFilter}, Activo? ${isActive}`);
-                }
-            });
-
-            let activeTrucks = trucks.filter(t => isTruckActiveForDate(t, dateFilter));
-            console.log(`Camiones activos hoy (${dateFilter}): ${activeTrucks.length} de ${trucks.length}`);
-
-            if (selectedZoneFilter !== 'ALL') {
-                activeTrucks = activeTrucks.filter(t => t.zones.includes(selectedZoneFilter));
-            }
-
-            // ... (rest of function)
-
-            const inServiceTrucks = activeTrucks.filter(t => !isTruckOutOfService(t.plate, dateFilter)).sort((a, b) => a.plate.localeCompare(b.plate));
-            const outOfServiceTrucks = activeTrucks.filter(t => isTruckOutOfService(t.plate, dateFilter));
-            const sortedTrucks = [...inServiceTrucks, ...outOfServiceTrucks];
-
-            sortedTrucks.forEach(truck => {
-                const plate = truck.plate;
-                const isOutOfService = isTruckOutOfService(plate, dateFilter);
-
-                const firstZone = truck.zones.length > 0 ? ZONE_MAP[truck.zones[0]] : null;
-                // Nota: Tailwind necesita clases completas en el CSS estático para funcionar. Si no lo has definido en el style, puede fallar aquí. Usaremos un fallback a slate.
-                const baseColor = firstZone ? firstZone.baseColor : 'slate';
-
-                // NEW: Calculate assigned trips and determine the required min-height
-                const assignedTrips = trips.filter(t =>
-                    t.assignedTruck === plate &&
-                    t.loadDate === dateFilter
-                );
-
-                const hasAssignedTripsToday = assignedTrips.length > 0;
-                const hasGroupageAssigned = assignedTrips.some(t => t.isGroupage === true);
-
-                // Base height for the row. Min-height: Reduced for ultra-compact. 96px (6rem) if trips assigned, 80px (5rem) if no trips.
-                const baseMinHeight = hasAssignedTripsToday ? 'min-h-[6rem]' : 'min-h-[5rem]';
-
-                const rowClass = isOutOfService
-                    ? `grid grid-cols-[140px_1fr_1fr_1fr_1fr] gap-2 p-2 rounded border-4 border-red-500 bg-red-50/50 items-stretch ${baseMinHeight} hover:shadow-xl transition-shadow truck-out-of-service`
-                    : `grid grid-cols-[140px_1fr_1fr_1fr_1fr] gap-2 bg-white p-2 rounded border border-slate-200 items-stretch ${baseMinHeight} hover:shadow-md transition-shadow`;
-
-                const plateBgClass = isOutOfService
-                    ? 'bg-red-700'
-                    : `bg-${baseColor}-800`;
-
-                const row = document.createElement('div');
-                row.className = rowClass;
-
-                const displayLocation = getTruckSuggestedLocation(truck, dateFilter);
-
-                const totalTruckCR = assignedTrips.reduce((sum, t) => sum + getTripCR(t), 0);
-                const formattedTruckCR = (Math.round(totalTruckCR * 10) / 10).toFixed(1);
-                const totalTruckPG = assignedTrips.reduce((sum, t) => sum + (t.pg || 0), 0);
-                const totalTruckEP = assignedTrips.reduce((sum, t) => sum + (t.ep || 0), 0);
-                const totalTruckPP = assignedTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
-
-                // NEW: Conditional Pallet Summary HTML
-                let palletSummaryHTML = '';
-                if (hasGroupageAssigned) {
-                    palletSummaryHTML = `
+                    // NEW: Conditional Pallet Summary HTML
+                    let palletSummaryHTML = '';
+                    if (hasGroupageAssigned) {
+                        palletSummaryHTML = `
                         <div class="text-center text-white text-[10px] font-bold mt-1">
                             <span class="bg-red-600/90 text-white px-2 py-0.5 rounded-full shadow-md">CR: ${formattedTruckCR}</span>
                         </div>
@@ -1022,13 +993,13 @@
                             <span class="bg-white/10 px-1 rounded" title="Medios Palets (PP)">PP:${totalTruckPP}</span>
                         </div>
                     `;
-                }
+                    }
 
-                const plateDiv = document.createElement('div');
-                const plateDivClass = `flex flex-col justify-between ${plateBgClass} text-white rounded p-2 shadow-inner relative group`;
+                    const plateDiv = document.createElement('div');
+                    const plateDivClass = `flex flex-col justify-between ${plateBgClass} text-white rounded p-2 shadow-inner relative group`;
 
-                plateDiv.className = plateDivClass;
-                plateDiv.innerHTML = `
+                    plateDiv.className = plateDivClass;
+                    plateDiv.innerHTML = `
                     <div class="flex justify-between items-start">
                         <i class="fa-solid fa-truck ${isOutOfService ? 'text-red-300' : 'text-slate-500'} text-xs"></i>
                         <button onclick="deleteTruck('${plate}')" class="text-slate-500 hover:text-red-400 transition opacity-0 group-hover:opacity-100 no-print" title="Marcar como Eliminado (a partir de hoy)">
@@ -1055,103 +1026,103 @@
                         <i class="fa-solid fa-wrench"></i> ${isOutOfService ? 'FDS' : 'OK'}
                     </button>
                     `;
-                row.appendChild(plateDiv);
+                    row.appendChild(plateDiv);
 
-                for (let i = 0; i < 4; i++) {
-                    const isReturn = i % 2 !== 0;
-                    const slotDiv = document.createElement('div');
+                    for (let i = 0; i < 4; i++) {
+                        const isReturn = i % 2 !== 0;
+                        const slotDiv = document.createElement('div');
 
-                    const isDisabledSlot = isOutOfService;
-                    const slotClasses = isDisabledSlot
-                        ? 'border-red-300 bg-red-100/50 cursor-not-allowed'
-                        : (isReturn ? 'border-slate-300 bg-slate-50/50' : 'border-red-200 bg-red-50/30');
+                        const isDisabledSlot = isOutOfService;
+                        const slotClasses = isDisabledSlot
+                            ? 'border-red-300 bg-red-100/50 cursor-not-allowed'
+                            : (isReturn ? 'border-slate-300 bg-slate-50/50' : 'border-red-200 bg-red-50/30');
 
-                    slotDiv.className = `drop-zone rounded border-2 border-dashed flex flex-col justify-start p-1 relative transition-colors h-full ${slotClasses} space-y-1`;
+                        slotDiv.className = `drop-zone rounded border-2 border-dashed flex flex-col justify-start p-1 relative transition-colors h-full ${slotClasses} space-y-1`;
 
-                    if (!isDisabledSlot) {
-                        slotDiv.setAttribute('ondragover', 'allowDrop(event)');
-                        slotDiv.setAttribute('ondrop', `drop(event, '${plate}', ${i})`);
-                    } else {
-                        slotDiv.setAttribute('ondragover', 'event.preventDefault()');
-                        slotDiv.setAttribute('ondrop', 'event.preventDefault()');
+                        if (!isDisabledSlot) {
+                            slotDiv.setAttribute('ondragover', 'allowDrop(event)');
+                            slotDiv.setAttribute('ondrop', `drop(event, '${plate}', ${i})`);
+                        } else {
+                            slotDiv.setAttribute('ondragover', 'event.preventDefault()');
+                            slotDiv.setAttribute('ondrop', 'event.preventDefault()');
+                        }
+                        slotDiv.setAttribute('data-slottype', isReturn ? 'return' : 'departure');
+
+                        const assignedTripsInSlot = trips.filter(t =>
+                            t.assignedTruck === plate &&
+                            t.assignedSlot === i &&
+                            t.loadDate === dateFilter
+                        );
+
+                        if (assignedTripsInSlot.length > 0) {
+
+                            // NEW: Check for single FULL_LOAD trip
+                            const isSingleFullLoad = assignedTripsInSlot.length === 1 && assignedTripsInSlot[0].isGroupage === false;
+
+                            assignedTripsInSlot.sort((a, b) => { // Sort by Groupage/Full Load status for visual consistency
+                                if (a.isGroupage && !b.isGroupage) return -1; // Groupage first
+                                if (!a.isGroupage && b.isGroupage) return 1;
+                                return 0;
+                            }).forEach(trip => {
+                                // Pass the flag for full height rendering
+                                const tripCard = createTripCard(trip, isSingleFullLoad);
+
+                                // Adjust margins for stacking vs. single full-load card
+                                if (!isSingleFullLoad) {
+                                    tripCard.style.marginBottom = '4px';
+                                } else {
+                                    tripCard.style.marginBottom = '0';
+                                    tripCard.style.maxHeight = '100%';
+                                }
+
+                                slotDiv.appendChild(tripCard);
+                            });
+
+                            if (isDisabledSlot) { slotDiv.innerHTML = ''; }
+
+                        } else if (isDisabledSlot) {
+                            slotDiv.innerHTML = `<span class="text-[9px] text-center text-red-500 font-bold uppercase select-none pointer-events-none absolute inset-0 flex items-center justify-center rotate-45">FUERA DE SERVICIO</span>`;
+                        } else {
+                            slotDiv.innerHTML = `<span class="text-[9px] text-center text-slate-300 font-bold uppercase select-none pointer-events-none absolute inset-0 flex items-center justify-center">${isReturn ? 'RET' : 'SAL'} ${Math.floor(i / 2) + 1}</span>`;
+                        }
+                        row.appendChild(slotDiv);
                     }
-                    slotDiv.setAttribute('data-slottype', isReturn ? 'return' : 'departure');
 
-                    const assignedTripsInSlot = trips.filter(t =>
-                        t.assignedTruck === plate &&
-                        t.assignedSlot === i &&
-                        t.loadDate === dateFilter
+                    board.appendChild(row);
+                });
+            }
+
+            // Render Zone Counters (Top Statistics)
+            function renderZoneCounters(dateFilter) {
+                const container = document.getElementById('zone-counters');
+                container.innerHTML = '';
+
+                ZONES.forEach((zone) => {
+                    // Count TRUCKS in this zone
+                    const trucksInZone = trucks.filter(t =>
+                        isTruckActiveForDate(t, dateFilter) &&
+                        !isTruckOutOfService(t.plate, dateFilter) &&
+                        t.zones.includes(zone.name)
                     );
 
-                    if (assignedTripsInSlot.length > 0) {
+                    // Count PENDING TRIPS for this zone (Origin = Zone)
+                    const pendingDeparture = trips.filter(t =>
+                        t.assignedTruck === null &&
+                        t.zone === zone.name &&
+                        t.type === 'departure' &&
+                        (!dateFilter || t.loadDate === dateFilter)
+                    );
 
-                        // NEW: Check for single FULL_LOAD trip
-                        const isSingleFullLoad = assignedTripsInSlot.length === 1 && assignedTripsInSlot[0].isGroupage === false;
+                    const pendingReturn = trips.filter(t =>
+                        t.assignedTruck === null &&
+                        t.zone === zone.name &&
+                        t.type === 'return' &&
+                        (!dateFilter || t.loadDate === dateFilter)
+                    );
 
-                        assignedTripsInSlot.sort((a, b) => { // Sort by Groupage/Full Load status for visual consistency
-                            if (a.isGroupage && !b.isGroupage) return -1; // Groupage first
-                            if (!a.isGroupage && b.isGroupage) return 1;
-                            return 0;
-                        }).forEach(trip => {
-                            // Pass the flag for full height rendering
-                            const tripCard = createTripCard(trip, isSingleFullLoad);
-
-                            // Adjust margins for stacking vs. single full-load card
-                            if (!isSingleFullLoad) {
-                                tripCard.style.marginBottom = '4px';
-                            } else {
-                                tripCard.style.marginBottom = '0';
-                                tripCard.style.maxHeight = '100%';
-                            }
-
-                            slotDiv.appendChild(tripCard);
-                        });
-
-                        if (isDisabledSlot) { slotDiv.innerHTML = ''; }
-
-                    } else if (isDisabledSlot) {
-                        slotDiv.innerHTML = `<span class="text-[9px] text-center text-red-500 font-bold uppercase select-none pointer-events-none absolute inset-0 flex items-center justify-center rotate-45">FUERA DE SERVICIO</span>`;
-                    } else {
-                        slotDiv.innerHTML = `<span class="text-[9px] text-center text-slate-300 font-bold uppercase select-none pointer-events-none absolute inset-0 flex items-center justify-center">${isReturn ? 'RET' : 'SAL'} ${Math.floor(i / 2) + 1}</span>`;
-                    }
-                    row.appendChild(slotDiv);
-                }
-
-                board.appendChild(row);
-            });
-        }
-
-        // Render Zone Counters (Top Statistics)
-        function renderZoneCounters(dateFilter) {
-            const container = document.getElementById('zone-counters');
-            container.innerHTML = '';
-
-            ZONES.forEach((zone) => {
-                // Count TRUCKS in this zone
-                const trucksInZone = trucks.filter(t =>
-                    isTruckActiveForDate(t, dateFilter) &&
-                    !isTruckOutOfService(t.plate, dateFilter) &&
-                    t.zones.includes(zone.name)
-                );
-
-                // Count PENDING TRIPS for this zone (Origin = Zone)
-                const pendingDeparture = trips.filter(t =>
-                    t.assignedTruck === null &&
-                    t.zone === zone.name &&
-                    t.type === 'departure' &&
-                    (!dateFilter || t.loadDate === dateFilter)
-                );
-
-                const pendingReturn = trips.filter(t =>
-                    t.assignedTruck === null &&
-                    t.zone === zone.name &&
-                    t.type === 'return' &&
-                    (!dateFilter || t.loadDate === dateFilter)
-                );
-
-                const div = document.createElement('div');
-                div.className = `flex flex-col items-center p-2 rounded border ${zone.color} bg-opacity-10 border-opacity-20`;
-                div.innerHTML = `
+                    const div = document.createElement('div');
+                    div.className = `flex flex-col items-center p-2 rounded border ${zone.color} bg-opacity-10 border-opacity-20`;
+                    div.innerHTML = `
                     <span class="text-xs font-bold text-slate-600 mb-1">${zone.code}</span>
                     <div class="flex gap-2 text-[10px] font-mono">
                         <span class="text-slate-500" title="Camiones Activos"><i class="fa-solid fa-truck"></i> ${trucksInZone.length}</span>
@@ -1159,132 +1130,132 @@
                         <span class="text-green-500" title="Retornos Pendientes"><i class="fa-solid fa-arrow-right-to-bracket"></i> ${pendingReturn.length}</span>
                     </div>
                 `;
-                container.appendChild(div);
-            });
-        }
-
-        function renderUnassigned(dateFilter) {
-            const unassignedDepartureZone = document.getElementById('unassigned-departure-zone');
-            const unassignedReturnZone = document.getElementById('unassigned-return-zone');
-            unassignedDepartureZone.innerHTML = '';
-            unassignedReturnZone.innerHTML = '';
-
-            const selectedZoneFilter = document.getElementById('zoneFilter').value;
-            const unassignedTypeFilter = document.getElementById('unassignedTypeFilter').value;
-
-            let unassignedTrips = trips.filter(t => t.assignedTruck === null);
-            console.log(`Viajes sin camión total: ${unassignedTrips.length}`);
-
-            if (dateFilter) {
-                unassignedTrips = unassignedTrips.filter(t => t.loadDate === dateFilter);
-            }
-            console.log(`Viajes sin camión para fecha ${dateFilter}: ${unassignedTrips.length}`);
-
-            if (selectedZoneFilter !== 'ALL') {
-                unassignedTrips = unassignedTrips.filter(t => t.zone === selectedZoneFilter);
+                    container.appendChild(div);
+                });
             }
 
-            // ... (rest of filtering)
+            function renderUnassigned(dateFilter) {
+                const unassignedDepartureZone = document.getElementById('unassigned-departure-zone');
+                const unassignedReturnZone = document.getElementById('unassigned-return-zone');
+                unassignedDepartureZone.innerHTML = '';
+                unassignedReturnZone.innerHTML = '';
 
-            // NEW: Aplicar el filtro de tipo de carga
-            if (unassignedTypeFilter === 'GROUPAGE') {
-                unassignedTrips = unassignedTrips.filter(t => t.isGroupage === true);
-            } else if (unassignedTypeFilter === 'FULL_LOAD') {
-                unassignedTrips = unassignedTrips.filter(t => t.isGroupage === false);
-            }
+                const selectedZoneFilter = document.getElementById('zoneFilter').value;
+                const unassignedTypeFilter = document.getElementById('unassignedTypeFilter').value;
 
-            const departureTrips = unassignedTrips.filter(t => t.type === 'departure');
-            const returnTrips = unassignedTrips.filter(t => t.type === 'return');
+                let unassignedTrips = trips.filter(t => t.assignedTruck === null);
+                console.log(`Viajes sin camión total: ${unassignedTrips.length}`);
 
-            // NEW: Calculate Total Pallets & CR
-            const totalDepartureCR = departureTrips.reduce((sum, t) => sum + getTripCR(t), 0);
-            const totalReturnCR = returnTrips.reduce((sum, t) => sum + getTripCR(t), 0);
-            const formattedDepartureCR = (Math.round(totalDepartureCR * 10) / 10).toFixed(1);
-            const formattedReturnCR = (Math.round(totalReturnCR * 10) / 10).toFixed(1);
+                if (dateFilter) {
+                    unassignedTrips = unassignedTrips.filter(t => t.loadDate === dateFilter);
+                }
+                console.log(`Viajes sin camión para fecha ${dateFilter}: ${unassignedTrips.length}`);
 
-            const totalDeparturePG = departureTrips.reduce((sum, t) => sum + (t.pg || 0), 0);
-            const totalDepartureEP = departureTrips.reduce((sum, t) => sum + (t.ep || 0), 0);
-            const totalDeparturePP = departureTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
+                if (selectedZoneFilter !== 'ALL') {
+                    unassignedTrips = unassignedTrips.filter(t => t.zone === selectedZoneFilter);
+                }
 
-            const totalReturnPG = returnTrips.reduce((sum, t) => sum + (t.pg || 0), 0);
-            const totalReturnEP = returnTrips.reduce((sum, t) => sum + (t.ep || 0), 0);
-            const totalReturnPP = returnTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
-            // END NEW UNASSIGNED PALLET CALCULATION
+                // ... (rest of filtering)
 
-            renderList(unassignedDepartureZone, departureTrips, 'Sin salidas pendientes.');
-            renderList(unassignedReturnZone, returnTrips, 'Sin retornos pendientes.');
+                // NEW: Aplicar el filtro de tipo de carga
+                if (unassignedTypeFilter === 'GROUPAGE') {
+                    unassignedTrips = unassignedTrips.filter(t => t.isGroupage === true);
+                } else if (unassignedTypeFilter === 'FULL_LOAD') {
+                    unassignedTrips = unassignedTrips.filter(t => t.isGroupage === false);
+                }
 
-            // NEW: Update counters to include CR and Pallet Counts
-            document.getElementById('count-departure').innerHTML = `${departureTrips.length} 
+                const departureTrips = unassignedTrips.filter(t => t.type === 'departure');
+                const returnTrips = unassignedTrips.filter(t => t.type === 'return');
+
+                // NEW: Calculate Total Pallets & CR
+                const totalDepartureCR = departureTrips.reduce((sum, t) => sum + getTripCR(t), 0);
+                const totalReturnCR = returnTrips.reduce((sum, t) => sum + getTripCR(t), 0);
+                const formattedDepartureCR = (Math.round(totalDepartureCR * 10) / 10).toFixed(1);
+                const formattedReturnCR = (Math.round(totalReturnCR * 10) / 10).toFixed(1);
+
+                const totalDeparturePG = departureTrips.reduce((sum, t) => sum + (t.pg || 0), 0);
+                const totalDepartureEP = departureTrips.reduce((sum, t) => sum + (t.ep || 0), 0);
+                const totalDeparturePP = departureTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
+
+                const totalReturnPG = returnTrips.reduce((sum, t) => sum + (t.pg || 0), 0);
+                const totalReturnEP = returnTrips.reduce((sum, t) => sum + (t.ep || 0), 0);
+                const totalReturnPP = returnTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
+                // END NEW UNASSIGNED PALLET CALCULATION
+
+                renderList(unassignedDepartureZone, departureTrips, 'Sin salidas pendientes.');
+                renderList(unassignedReturnZone, returnTrips, 'Sin retornos pendientes.');
+
+                // NEW: Update counters to include CR and Pallet Counts
+                document.getElementById('count-departure').innerHTML = `${departureTrips.length} 
                 <span class="text-xs font-normal text-slate-500 ml-1">
                     (<span class="text-red-600 font-bold">${formattedDepartureCR} CR</span> | PG:${totalDeparturePG} / EP:${totalDepartureEP} / PP:${totalDeparturePP})
                 </span>`;
-            document.getElementById('count-return').innerHTML = `${returnTrips.length} 
+                document.getElementById('count-return').innerHTML = `${returnTrips.length} 
                 <span class="text-xs font-normal text-slate-500 ml-1">
                     (<span class="text-red-600 font-bold">${formattedReturnCR} CR</span> | PG:${totalReturnPG} / EP:${totalReturnEP} / PP:${totalReturnPP})
                 </span>`;
-        }
-
-        function renderList(container, list, emptyMsg) {
-            if (list.length === 0) {
-                container.innerHTML = `<div class="text-center text-slate-300 py-4 italic text-[10px]">${emptyMsg}</div>`;
-                return;
             }
-            list.sort((a, b) => {
-                if (a.isUrgent && !b.isUrgent) return -1;
-                if (!a.isUrgent && b.isUrgent) return 1;
-                return compareDates(a.loadDate, b.loadDate);
-            });
 
-            list.forEach(trip => {
-                container.appendChild(createTripCard(trip));
-            });
-        }
+            function renderList(container, list, emptyMsg) {
+                if (list.length === 0) {
+                    container.innerHTML = `<div class="text-center text-slate-300 py-4 italic text-[10px]">${emptyMsg}</div>`;
+                    return;
+                }
+                list.sort((a, b) => {
+                    if (a.isUrgent && !b.isUrgent) return -1;
+                    if (!a.isUrgent && b.isUrgent) return 1;
+                    return compareDates(a.loadDate, b.loadDate);
+                });
 
-        // --- Funciones de Viajes y Drag/Drop ---
+                list.forEach(trip => {
+                    container.appendChild(createTripCard(trip));
+                });
+            }
 
-        // Helper to render zone toggle buttons inside the truck row
-        function createZoneButton(activeList, zone, truckPlate) {
-            // activeList contains names (e.g. 'Murcia'), we display code (e.g. 'MU')
-            const isActive = activeList.includes(zone.name);
-            return `
+            // --- Funciones de Viajes y Drag/Drop ---
+
+            // Helper to render zone toggle buttons inside the truck row
+            function createZoneButton(activeList, zone, truckPlate) {
+                // activeList contains names (e.g. 'Murcia'), we display code (e.g. 'MU')
+                const isActive = activeList.includes(zone.name);
+                return `
                 <button onclick="toggleZone('${truckPlate}', '${zone.name}')" 
                     class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors cursor-pointer
                     ${isActive
-                    ? `bg-${zone.baseColor}-500 text-white shadow-sm ring-1 ring-${zone.baseColor}-600`
-                    : 'bg-slate-100 text-slate-300 border border-slate-200 hover:bg-slate-200'}">
+                        ? `bg-${zone.baseColor}-500 text-white shadow-sm ring-1 ring-${zone.baseColor}-600`
+                        : 'bg-slate-100 text-slate-300 border border-slate-200 hover:bg-slate-200'}">
                     ${zone.code}
                 </button>
             `;
-        }
-
-        // MODIFIED: Added isFullHeight parameter
-        function createTripCard(trip, isFullHeight = false) {
-            const div = document.createElement('div');
-
-            let borderColorClass;
-            if (trip.isUrgent || isOverdue(trip.loadDate)) {
-                borderColorClass = 'border-overdue';
-            } else {
-                borderColorClass = trip.type === 'departure' ? 'border-departure' : 'border-return';
             }
 
-            // NEW: Added flex-grow and h-full for single FULL_LOAD trips
-            const fullHeightClass = isFullHeight ? 'h-full flex-grow' : 'h-auto';
+            // MODIFIED: Added isFullHeight parameter
+            function createTripCard(trip, isFullHeight = false) {
+                const div = document.createElement('div');
 
-            div.className = `draggable-source bg-white border-l-[4px] ${borderColorClass} shadow-sm rounded-sm p-1.5 cursor-grab relative group hover:shadow-md hover:z-10 transition-all w-full flex flex-col justify-between select-none ${fullHeightClass}`;
-            div.setAttribute('draggable', 'true');
-            div.setAttribute('ondragstart', `drag(event, ${trip.id}, '${trip.type}')`);
-            div.setAttribute('ondblclick', `editTripModal(${trip.id})`);
+                let borderColorClass;
+                if (trip.isUrgent || isOverdue(trip.loadDate)) {
+                    borderColorClass = 'border-overdue';
+                } else {
+                    borderColorClass = trip.type === 'departure' ? 'border-departure' : 'border-return';
+                }
 
-            let notifyControlHTML = '';
+                // NEW: Added flex-grow and h-full for single FULL_LOAD trips
+                const fullHeightClass = isFullHeight ? 'h-full flex-grow' : 'h-auto';
 
-            if (trip.assignedTruck !== null) {
-                const buttonClasses = trip.isNotified
-                    ? 'bg-green-500 hover:bg-green-600 text-white'
-                    : 'bg-slate-300 hover:bg-slate-400 text-slate-800';
+                div.className = `draggable-source bg-white border-l-[4px] ${borderColorClass} shadow-sm rounded-sm p-1.5 cursor-grab relative group hover:shadow-md hover:z-10 transition-all w-full flex flex-col justify-between select-none ${fullHeightClass}`;
+                div.setAttribute('draggable', 'true');
+                div.setAttribute('ondragstart', `drag(event, ${trip.id}, '${trip.type}')`);
+                div.setAttribute('ondblclick', `editTripModal(${trip.id})`);
 
-                notifyControlHTML = `
+                let notifyControlHTML = '';
+
+                if (trip.assignedTruck !== null) {
+                    const buttonClasses = trip.isNotified
+                        ? 'bg-green-500 hover:bg-green-600 text-white'
+                        : 'bg-slate-300 hover:bg-slate-400 text-slate-800';
+
+                    notifyControlHTML = `
                     <div class="notify-control no-print">
                         <input type="time" 
                             id="time-${trip.id}"
@@ -1300,27 +1271,27 @@
                     </div>
                     <span class="notify-date text-slate-400 font-mono">${formatDate(trip.loadDate)}</span>
                 `;
-            } else {
-                notifyControlHTML = `<span class="notify-date text-slate-400 font-mono">${formatDate(trip.loadDate)}</span>`;
-            }
+                } else {
+                    notifyControlHTML = `<span class="notify-date text-slate-400 font-mono">${formatDate(trip.loadDate)}</span>`;
+                }
 
-            // Zone Badge (Top Left)
-            const zoneBadgeHTML = trip.zone
-                ? `<span class="absolute top-1 left-1 px-1 py-0.5 rounded-full text-white text-[8px] font-bold ${ZONE_MAP[trip.zone].color}" title="Zona: ${trip.zone}">${ZONE_MAP[trip.zone].code}</span>`
-                : '';
+                // Zone Badge (Top Left)
+                const zoneBadgeHTML = trip.zone
+                    ? `<span class="absolute top-1 left-1 px-1 py-0.5 rounded-full text-white text-[8px] font-bold ${ZONE_MAP[trip.zone].color}" title="Zona: ${trip.zone}">${ZONE_MAP[trip.zone].code}</span>`
+                    : '';
 
-            // NEW: Groupage/Full Load Badge (Top Right, adjusted position based on assignment)
-            const loadTypeBadgeRightPos = trip.assignedTruck !== null ? 'right-[115px]' : 'right-1';
+                // NEW: Groupage/Full Load Badge (Top Right, adjusted position based on assignment)
+                const loadTypeBadgeRightPos = trip.assignedTruck !== null ? 'right-[115px]' : 'right-1';
 
-            const loadTypeBadgeHTML = trip.isGroupage
-                ? `<span class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-white text-[8px] font-bold bg-sky-600" title="Viaje de Grupaje">GRU</span>`
-                : `<span class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-slate-600 bg-slate-200 text-[8px] font-bold" title="Viaje de Carga Completa">COMP</span>`;
+                const loadTypeBadgeHTML = trip.isGroupage
+                    ? `<span class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-white text-[8px] font-bold bg-sky-600" title="Viaje de Grupaje">GRU</span>`
+                    : `<span class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-slate-600 bg-slate-200 text-[8px] font-bold" title="Viaje de Carga Completa">COMP</span>`;
 
-            // Pallet Info Container (PG, EP, PP, CR) - No absolute positioning, added highlighting
-            const tripCR = getTripCR(trip);
-            let palletInfoHTML = '';
-            if (trip.isGroupage) {
-                palletInfoHTML = `
+                // Pallet Info Container (PG, EP, PP, CR) - No absolute positioning, added highlighting
+                const tripCR = getTripCR(trip);
+                let palletInfoHTML = '';
+                if (trip.isGroupage) {
+                    palletInfoHTML = `
                     <div class="mt-1 p-0.5 text-[8px] font-bold text-slate-700 flex justify-end gap-2 border-t border-slate-100 bg-slate-50/70 rounded-sm">
                         <span title="Palet Grande (PG)">PG: ${trip.pg || 0}</span>
                         <span title="Euro Palet (EP)">EP: ${trip.ep || 0}</span>
@@ -1328,14 +1299,14 @@
                         <span class="text-white bg-red-600 px-1 rounded ml-1 shadow-sm" title="Cantidad Real (CR)">CR: ${tripCR.toFixed(1)}</span>
                     </div>
                 `;
-            }
+                }
 
-            const driverInfo = trip.driver ? `<span class="text-[9px] font-bold text-slate-700 truncate mt-0.5" title="Conductor: ${trip.driver}"><i class="fa-solid fa-user text-[8px] text-slate-400 mr-1"></i>${trip.driver}</span>` : '';
+                const driverInfo = trip.driver ? `<span class="text-[9px] font-bold text-slate-700 truncate mt-0.5" title="Conductor: ${trip.driver}"><i class="fa-solid fa-user text-[8px] text-slate-400 mr-1"></i>${trip.driver}</span>` : '';
 
-            // Adjust client padding to account for zone badge
-            const clientInfoClasses = trip.assignedTruck !== null ? 'pr-[110px] pl-[25px]' : 'pr-1.5 pl-[25px]';
+                // Adjust client padding to account for zone badge
+                const clientInfoClasses = trip.assignedTruck !== null ? 'pr-[110px] pl-[25px]' : 'pr-1.5 pl-[25px]';
 
-            div.innerHTML = `
+                div.innerHTML = `
                 ${zoneBadgeHTML}
                 ${loadTypeBadgeHTML}
                 <div class="flex justify-between items-start leading-none ${clientInfoClasses}"> 
@@ -1350,40 +1321,40 @@
                 </div>
                 ${palletInfoHTML}
             `;
-            return div;
-        }
-
-        async function updateNotificationTime(id) {
-            const trip = trips.find(t => t.id === id);
-            const timeInput = document.getElementById(`time-${id}`);
-            if (trip && timeInput) {
-                trip.notifyTime = timeInput.value;
-                await api.saveTrip(trip);
+                return div;
             }
-        }
 
-        async function toggleNotificationStatus(id) {
-            const trip = trips.find(t => t.id === id);
-            if (trip) {
-                trip.isNotified = !trip.isNotified;
-                await api.saveTrip(trip);
-                renderAll();
+            async function updateNotificationTime(id) {
+                const trip = trips.find(t => t.id === id);
+                const timeInput = document.getElementById(`time-${id}`);
+                if (trip && timeInput) {
+                    trip.notifyTime = timeInput.value;
+                    await api.saveTrip(trip);
+                }
             }
-        }
 
-        function renderTripZoneSelector(selectedZone = null) {
-            const selector = document.getElementById('tripZoneSelector');
-            if (!selector) return;
-            selector.innerHTML = ZONES.map(z => {
-                const isChecked = z.name === selectedZone ? 'checked' : '';
-                const baseColor = z.baseColor;
+            async function toggleNotificationStatus(id) {
+                const trip = trips.find(t => t.id === id);
+                if (trip) {
+                    trip.isNotified = !trip.isNotified;
+                    await api.saveTrip(trip);
+                    renderAll();
+                }
+            }
 
-                // MODIFICADO: Clases de selección más visibles (outline-offset-2, outline-*-800, bg-*-700)
-                const selectedClasses = isChecked
-                    ? `bg-${baseColor}-700 outline outline-4 outline-offset-2 outline-${baseColor}-800`
-                    : '';
+            function renderTripZoneSelector(selectedZone = null) {
+                const selector = document.getElementById('tripZoneSelector');
+                if (!selector) return;
+                selector.innerHTML = ZONES.map(z => {
+                    const isChecked = z.name === selectedZone ? 'checked' : '';
+                    const baseColor = z.baseColor;
 
-                return `
+                    // MODIFICADO: Clases de selección más visibles (outline-offset-2, outline-*-800, bg-*-700)
+                    const selectedClasses = isChecked
+                        ? `bg-${baseColor}-700 outline outline-4 outline-offset-2 outline-${baseColor}-800`
+                        : '';
+
+                    return `
                     <label class="flex items-center cursor-pointer">
                         <input type="radio" 
                                name="tripZone" 
@@ -1398,218 +1369,218 @@
                         </span>
                     </label>
                 `;
-            }).join('');
+                }).join('');
 
-            selector.querySelectorAll('input[name="tripZone"]').forEach(input => {
-                const zoneLabel = input.nextElementSibling;
-                const baseColor = ZONE_MAP[input.value].baseColor;
+                selector.querySelectorAll('input[name="tripZone"]').forEach(input => {
+                    const zoneLabel = input.nextElementSibling;
+                    const baseColor = ZONE_MAP[input.value].baseColor;
 
-                input.addEventListener('change', () => {
-                    // 1. Resetear todas las etiquetas
-                    selector.querySelectorAll('input[name="tripZone"]').forEach(innerInput => {
-                        const innerLabel = innerInput.nextElementSibling;
-                        const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
+                    input.addEventListener('change', () => {
+                        // 1. Resetear todas las etiquetas
+                        selector.querySelectorAll('input[name="tripZone"]').forEach(innerInput => {
+                            const innerLabel = innerInput.nextElementSibling;
+                            const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
 
-                        // Quitar las clases de selección fuerte (MODIFICADO)
-                        innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${innerBaseColor}-800`);
-                        // Volver al estado normal
-                        innerLabel.classList.add(`bg-${innerBaseColor}-500`);
+                            // Quitar las clases de selección fuerte (MODIFICADO)
+                            innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${innerBaseColor}-800`);
+                            // Volver al estado normal
+                            innerLabel.classList.add(`bg-${innerBaseColor}-500`);
+                        });
+
+                        // 2. Aplicar clases a la etiqueta seleccionada (MODIFICADO)
+                        zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${baseColor}-800`);
+                        zoneLabel.classList.remove(`bg-${baseColor}-500`);
                     });
-
-                    // 2. Aplicar clases a la etiqueta seleccionada (MODIFICADO)
-                    zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${baseColor}-800`);
-                    zoneLabel.classList.remove(`bg-${baseColor}-500`);
                 });
-            });
-        }
-
-        /**
-         * Muestra u oculta los campos de palets según la casilla "Grupaje".
-         */
-        function togglePalletInputs() {
-            const isGroupage = document.getElementById('isGroupage').checked;
-            const palletContainer = document.getElementById('palletInputsContainer');
-
-            if (palletContainer) {
-                if (isGroupage) {
-                    palletContainer.classList.remove('hidden');
-                } else {
-                    palletContainer.classList.add('hidden');
-                    // Limpiar los valores al ocultar, para evitar guardar datos erróneos en un completo.
-                    document.getElementById('pg').value = 0;
-                    document.getElementById('ep').value = 0;
-                    document.getElementById('pp').value = 0;
-                }
             }
-        }
 
+            /**
+             * Muestra u oculta los campos de palets según la casilla "Grupaje".
+             */
+            function togglePalletInputs() {
+                const isGroupage = document.getElementById('isGroupage').checked;
+                const palletContainer = document.getElementById('palletInputsContainer');
 
-        function openModal() {
-            document.getElementById('editTripId').value = '';
-            document.getElementById('modalTitle').innerText = 'Agregar Nuevo Viaje';
-            document.getElementById('submitButton').innerText = 'Crear Ficha';
-            document.getElementById('deleteButton').classList.add('hidden');
-            document.getElementById('tripForm').reset();
-            document.getElementById('loadDate').value = document.getElementById('dateFilter').value;
-            document.getElementById('unloadDate').value = document.getElementById('dateFilter').value; // Default unload to load date
-
-            // NEW: Set default pallet values
-            document.getElementById('pg').value = 0;
-            document.getElementById('ep').value = 0;
-            document.getElementById('pp').value = 0;
-            // NEW: Set default for groupage (false)
-            document.getElementById('isGroupage').checked = false;
-
-            document.getElementById('isGroupage').checked = false;
-
-            renderTripZoneSelector();
-            renderTripDestinationZoneSelector(); // NEW
-            togglePalletInputs(); // Muestra/oculta los palets según el estado inicial
-            document.getElementById('modal').classList.remove('hidden');
-        }
-
-        function editTripModal(id) {
-            const trip = trips.find(t => t.id === id);
-            if (!trip) return;
-
-            document.getElementById('editTripId').value = id;
-            document.getElementById('modalTitle').innerText = 'Editar Viaje: ' + trip.client;
-            document.getElementById('submitButton').innerText = 'Actualizar Viaje';
-            document.getElementById('deleteButton').classList.remove('hidden');
-
-            document.getElementById('client').value = trip.client;
-            document.getElementById('driver').value = trip.driver || '';
-            document.getElementById('origin').value = trip.origin;
-            document.getElementById('destination').value = trip.destination;
-            document.getElementById('loadDate').value = trip.loadDate;
-            document.getElementById('unloadDate').value = trip.unloadDate;
-            document.getElementById('isUrgent').checked = trip.isUrgent;
-            document.getElementById('isGroupage').checked = trip.isGroupage || false; // NEW: Populate isGroupage
-            document.querySelector(`input[name="tripType"][value="${trip.type}"]`).checked = true;
-
-            // NEW: Populate pallet fields
-            document.getElementById('pg').value = trip.pg || 0;
-            document.getElementById('ep').value = trip.ep || 0;
-            document.getElementById('pp').value = trip.pp || 0;
-
-            renderTripZoneSelector(trip.zone);
-            renderTripDestinationZoneSelector(trip.destinationZone); // NEW
-            togglePalletInputs(); // Muestra/oculta los palets según el estado del viaje
-
-            document.getElementById('modal').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('modal').classList.add('hidden');
-            document.getElementById('tripForm').reset();
-        }
-
-        async function saveTrip(event) {
-            event.preventDefault();
-            const idInput = document.getElementById('editTripId').value;
-            const id = idInput ? parseInt(idInput) : null;
-            const client = document.getElementById('client').value;
-            const driver = document.getElementById('driver').value;
-            const origin = document.getElementById('origin').value;
-            const destination = document.getElementById('destination').value;
-            const loadDate = document.getElementById('loadDate').value;
-            const unloadDate = document.getElementById('unloadDate').value;
-            const type = document.querySelector('input[name="tripType"]:checked').value;
-            const isUrgent = document.getElementById('isUrgent').checked;
-            const isGroupage = document.getElementById('isGroupage').checked;
-            // Get selected zone
-            const zoneInput = document.querySelector('input[name="tripZone"]:checked');
-            const zone = zoneInput ? zoneInput.value : null;
-
-            // NEW: Get selected destination zone
-            const destZoneInput = document.querySelector('input[name="tripDestinationZone"]:checked');
-            const destinationZone = destZoneInput ? destZoneInput.value : null;
-
-            const pg = parseInt(document.getElementById('pg').value) || 0;
-            const ep = parseInt(document.getElementById('ep').value) || 0;
-            const pp = parseInt(document.getElementById('pp').value) || 0;
-
-            const tripData = {
-                id: id,
-                client, driver, origin, destination, loadDate, unloadDate, type,
-                isUrgent, isGroupage, zone,
-                destinationZone, // NEW
-                pg, ep, pp
-            };
-
-            // Preserve assigned truck/slot if editing, though usually modal is for generic editing.
-            // If it's a new trip, they are null by default in backend or we send null.
-            if (id) {
-                const existingTrip = trips.find(t => t.id === id);
-                if (existingTrip) {
-                    tripData.assignedTruck = existingTrip.assignedTruck;
-                    tripData.assignedSlot = existingTrip.assignedSlot;
-                    tripData.notifyTime = existingTrip.notifyTime;
-                    tripData.isNotified = existingTrip.isNotified;
+                if (palletContainer) {
+                    if (isGroupage) {
+                        palletContainer.classList.remove('hidden');
+                    } else {
+                        palletContainer.classList.add('hidden');
+                        // Limpiar los valores al ocultar, para evitar guardar datos erróneos en un completo.
+                        document.getElementById('pg').value = 0;
+                        document.getElementById('ep').value = 0;
+                        document.getElementById('pp').value = 0;
+                    }
                 }
             }
 
-            try {
-                await api.saveTrip(tripData);
-                closeModal();
-                loadData(); // This will re-fetch data and re-render everything
-            } catch (err) {
-                console.error(err);
-                alert("Error al guardar viaje: " + err.message);
+
+            function openModal() {
+                document.getElementById('editTripId').value = '';
+                document.getElementById('modalTitle').innerText = 'Agregar Nuevo Viaje';
+                document.getElementById('submitButton').innerText = 'Crear Ficha';
+                document.getElementById('deleteButton').classList.add('hidden');
+                document.getElementById('tripForm').reset();
+                document.getElementById('loadDate').value = document.getElementById('dateFilter').value;
+                document.getElementById('unloadDate').value = document.getElementById('dateFilter').value; // Default unload to load date
+
+                // NEW: Set default pallet values
+                document.getElementById('pg').value = 0;
+                document.getElementById('ep').value = 0;
+                document.getElementById('pp').value = 0;
+                // NEW: Set default for groupage (false)
+                document.getElementById('isGroupage').checked = false;
+
+                document.getElementById('isGroupage').checked = false;
+
+                renderTripZoneSelector();
+                renderTripDestinationZoneSelector(); // NEW
+                togglePalletInputs(); // Muestra/oculta los palets según el estado inicial
+                document.getElementById('modal').classList.remove('hidden');
             }
-        }
 
-        async function deleteTrip() {
-            const idToDelete = parseInt(document.getElementById('editTripId').value);
-            const trip = trips.find(t => t.id === idToDelete);
+            function editTripModal(id) {
+                const trip = trips.find(t => t.id === id);
+                if (!trip) return;
 
-            if (confirm(`¿Estás seguro de eliminar el viaje?`)) {
+                document.getElementById('editTripId').value = id;
+                document.getElementById('modalTitle').innerText = 'Editar Viaje: ' + trip.client;
+                document.getElementById('submitButton').innerText = 'Actualizar Viaje';
+                document.getElementById('deleteButton').classList.remove('hidden');
 
-                if (trip && trip.assignedTruck) {
-                    clearTruckPersistence(trip.assignedTruck);
+                document.getElementById('client').value = trip.client;
+                document.getElementById('driver').value = trip.driver || '';
+                document.getElementById('origin').value = trip.origin;
+                document.getElementById('destination').value = trip.destination;
+                document.getElementById('loadDate').value = trip.loadDate;
+                document.getElementById('unloadDate').value = trip.unloadDate;
+                document.getElementById('isUrgent').checked = trip.isUrgent;
+                document.getElementById('isGroupage').checked = trip.isGroupage || false; // NEW: Populate isGroupage
+                document.querySelector(`input[name="tripType"][value="${trip.type}"]`).checked = true;
+
+                // NEW: Populate pallet fields
+                document.getElementById('pg').value = trip.pg || 0;
+                document.getElementById('ep').value = trip.ep || 0;
+                document.getElementById('pp').value = trip.pp || 0;
+
+                renderTripZoneSelector(trip.zone);
+                renderTripDestinationZoneSelector(trip.destinationZone); // NEW
+                togglePalletInputs(); // Muestra/oculta los palets según el estado del viaje
+
+                document.getElementById('modal').classList.remove('hidden');
+            }
+
+            function closeModal() {
+                document.getElementById('modal').classList.add('hidden');
+                document.getElementById('tripForm').reset();
+            }
+
+            async function saveTrip(event) {
+                event.preventDefault();
+                const idInput = document.getElementById('editTripId').value;
+                const id = idInput ? parseInt(idInput) : null;
+                const client = document.getElementById('client').value;
+                const driver = document.getElementById('driver').value;
+                const origin = document.getElementById('origin').value;
+                const destination = document.getElementById('destination').value;
+                const loadDate = document.getElementById('loadDate').value;
+                const unloadDate = document.getElementById('unloadDate').value;
+                const type = document.querySelector('input[name="tripType"]:checked').value;
+                const isUrgent = document.getElementById('isUrgent').checked;
+                const isGroupage = document.getElementById('isGroupage').checked;
+                // Get selected zone
+                const zoneInput = document.querySelector('input[name="tripZone"]:checked');
+                const zone = zoneInput ? zoneInput.value : null;
+
+                // NEW: Get selected destination zone
+                const destZoneInput = document.querySelector('input[name="tripDestinationZone"]:checked');
+                const destinationZone = destZoneInput ? destZoneInput.value : null;
+
+                const pg = parseInt(document.getElementById('pg').value) || 0;
+                const ep = parseInt(document.getElementById('ep').value) || 0;
+                const pp = parseInt(document.getElementById('pp').value) || 0;
+
+                const tripData = {
+                    id: id,
+                    client, driver, origin, destination, loadDate, unloadDate, type,
+                    isUrgent, isGroupage, zone,
+                    destinationZone, // NEW
+                    pg, ep, pp
+                };
+
+                // Preserve assigned truck/slot if editing, though usually modal is for generic editing.
+                // If it's a new trip, they are null by default in backend or we send null.
+                if (id) {
+                    const existingTrip = trips.find(t => t.id === id);
+                    if (existingTrip) {
+                        tripData.assignedTruck = existingTrip.assignedTruck;
+                        tripData.assignedSlot = existingTrip.assignedSlot;
+                        tripData.notifyTime = existingTrip.notifyTime;
+                        tripData.isNotified = existingTrip.isNotified;
+                    }
                 }
 
                 try {
-                    await api.deleteTrip(idToDelete);
-                    await loadData();
+                    await api.saveTrip(tripData);
                     closeModal();
-                } catch (error) {
-                    console.error(error);
-                    alert("Error eliminando viaje: " + error.message);
+                    loadData(); // This will re-fetch data and re-render everything
+                } catch (err) {
+                    console.error(err);
+                    alert("Error al guardar viaje: " + err.message);
                 }
             }
-        }
 
-        function drag(ev, tripId, tripType) {
-            ev.dataTransfer.setData("text/plain", tripId);
-            ev.dataTransfer.setData("text/tripType", tripType);
-            const trip = trips.find(t => t.id === tripId);
-            ev.dataTransfer.setData("text/originalTruckPlate", trip.assignedTruck || '');
-            ev.effectAllowed = "move";
-        }
+            async function deleteTrip() {
+                const idToDelete = parseInt(document.getElementById('editTripId').value);
+                const trip = trips.find(t => t.id === idToDelete);
 
-        function allowDrop(ev) {
-            ev.preventDefault();
-            ev.currentTarget.classList.add('drag-over');
-        }
+                if (confirm(`¿Estás seguro de eliminar el viaje?`)) {
 
-        document.addEventListener('dragleave', e => {
-            if (e.target.classList.contains('drop-zone')) e.target.classList.remove('drag-over');
-        });
+                    if (trip && trip.assignedTruck) {
+                        clearTruckPersistence(trip.assignedTruck);
+                    }
 
-        // NEW: Render Destination Zone Selector (Clone needed for different ID/Name)
-        function renderTripDestinationZoneSelector(selectedZone = null) {
-            const selector = document.getElementById('tripDestinationZoneSelector');
-            if (!selector) return;
-            selector.innerHTML = ZONES.map(z => {
-                const isChecked = z.name === selectedZone ? 'checked' : '';
-                const baseColor = z.baseColor;
+                    try {
+                        await api.deleteTrip(idToDelete);
+                        await loadData();
+                        closeModal();
+                    } catch (error) {
+                        console.error(error);
+                        alert("Error eliminando viaje: " + error.message);
+                    }
+                }
+            }
 
-                const selectedClasses = isChecked
-                    ? `bg-${baseColor}-700 outline outline-4 outline-offset-2 outline-${baseColor}-800`
-                    : '';
+            function drag(ev, tripId, tripType) {
+                ev.dataTransfer.setData("text/plain", tripId);
+                ev.dataTransfer.setData("text/tripType", tripType);
+                const trip = trips.find(t => t.id === tripId);
+                ev.dataTransfer.setData("text/originalTruckPlate", trip.assignedTruck || '');
+                ev.effectAllowed = "move";
+            }
 
-                return `
+            function allowDrop(ev) {
+                ev.preventDefault();
+                ev.currentTarget.classList.add('drag-over');
+            }
+
+            document.addEventListener('dragleave', e => {
+                if (e.target.classList.contains('drop-zone')) e.target.classList.remove('drag-over');
+            });
+
+            // NEW: Render Destination Zone Selector (Clone needed for different ID/Name)
+            function renderTripDestinationZoneSelector(selectedZone = null) {
+                const selector = document.getElementById('tripDestinationZoneSelector');
+                if (!selector) return;
+                selector.innerHTML = ZONES.map(z => {
+                    const isChecked = z.name === selectedZone ? 'checked' : '';
+                    const baseColor = z.baseColor;
+
+                    const selectedClasses = isChecked
+                        ? `bg-${baseColor}-700 outline outline-4 outline-offset-2 outline-${baseColor}-800`
+                        : '';
+
+                    return `
                     <label class="flex items-center cursor-pointer">
                         <input type="radio" 
                                name="tripDestinationZone" 
@@ -1624,207 +1595,207 @@
                         </span>
                     </label>
                 `;
-            }).join('');
+                }).join('');
 
-            selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(input => {
-                const zoneLabel = input.nextElementSibling;
-                const baseColor = ZONE_MAP[input.value].baseColor;
+                selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(input => {
+                    const zoneLabel = input.nextElementSibling;
+                    const baseColor = ZONE_MAP[input.value].baseColor;
 
-                input.addEventListener('change', () => {
-                    selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(innerInput => {
-                        const innerLabel = innerInput.nextElementSibling;
-                        const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
-                        innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${innerBaseColor}-800`);
-                        innerLabel.classList.add(`bg-${innerBaseColor}-500`);
-                    });
-                    zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${baseColor}-800`);
-                    zoneLabel.classList.remove(`bg-${baseColor}-500`);
-                });
-            });
-        }
-
-        // ==========================================
-        // FUNCIÓN DROP (MODIFICADA PARA ENFORZAR EXCLUSIVIDAD DE CARGA COMPLETA)
-        // ==========================================
-        async function drop(ev, plate, slotIndex) {
-            ev.preventDefault();
-            document.querySelectorAll('.drop-zone').forEach(el => el.classList.remove('drag-over'));
-
-            const tripId = parseInt(ev.dataTransfer.getData("text/plain"));
-            const originalTruckPlate = ev.dataTransfer.getData("text/originalTruckPlate");
-            const trip = trips.find(t => t.id === tripId);
-
-            if (!trip) return;
-
-            const dateFilter = document.getElementById('dateFilter').value;
-
-            // --- Caso 1: Desasignar a pendientes (plate === null) ---
-            if (plate === null) {
-                const plateToRecalculate = trip.assignedTruck || originalTruckPlate;
-
-                trip.assignedTruck = null;
-                trip.assignedSlot = null;
-                await api.saveTrip(trip); // SAVE API
-
-                if (plateToRecalculate) {
-                    clearTruckPersistence(plateToRecalculate);
-                }
-
-                await loadData(); // Reload to sync
-                return;
-            }
-
-            // --- Caso 2: Asignar a un camión (plate !== null) ---
-
-            const targetTruck = trucks.find(t => t.plate === plate);
-
-            if (targetTruck && isTruckOutOfService(targetTruck.plate, dateFilter)) {
-                alert(`¡Error! No puedes asignar un viaje al camión ${targetTruck.plate} porque está "Fuera de Servicio" en esta fecha.`);
-                return;
-            }
-
-            if (dateFilter && trip.loadDate !== dateFilter) {
-                alert(`¡Error! Este viaje es para el ${formatDate(trip.loadDate)} y estás viendo la planificación del ${formatDate(dateFilter)}.`);
-                return;
-            }
-
-            const incomingTripType = ev.dataTransfer.getData("text/tripType");
-            const dropSlotType = ev.currentTarget.getAttribute('data-slottype');
-
-            if (incomingTripType !== dropSlotType) {
-                alert(`¡Error! No puedes asignar un viaje de ${incomingTripType === 'departure' ? 'SALIDA' : 'RETORNO'} en un hueco de ${dropSlotType === 'departure' ? 'SALIDA' : 'RETORNO'}.`);
-                return;
-            }
-
-            // =========================================================================
-            // LÓGICA DE EXCLUSIVIDAD DE CARGA COMPLETA (COMP) Y STACKING DE GRUPAJE (GRU)
-            // =========================================================================
-
-            const assignedTripsInSlot = trips.filter(t =>
-                t.assignedTruck === plate &&
-                t.assignedSlot === slotIndex &&
-                t.loadDate === dateFilter &&
-                t.id !== tripId // Excluye el viaje que se está moviendo (si ya estaba en este slot)
-            );
-
-            const isSlotOccupied = assignedTripsInSlot.length > 0;
-            const isSlotOccupiedByFullLoad = assignedTripsInSlot.some(t => t.isGroupage === false);
-
-            // Regla 1: Viaje entrante es COMPLETO
-            if (trip.isGroupage === false) {
-                if (isSlotOccupied) {
-                    alert(`¡Error! Una Carga COMPLETA solo puede ocupar un hueco completamente vacío.`);
-                    return;
-                }
-            }
-
-            // Regla 2: Viaje entrante es GRUPAJE
-            else if (trip.isGroupage === true) {
-                if (isSlotOccupiedByFullLoad) {
-                    alert(`¡Error! No puedes asignar un Grupaje a un hueco que ya contiene una Carga Completa.`);
-                    return;
-                }
-                // Si el slot está vacío o solo contiene otros Grupajes, la asignación es permitida.
-            }
-            // =========================================================================
-
-            // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la persistencia del camión anterior.
-            if (trip.assignedTruck && trip.assignedTruck !== plate) {
-                await clearTruckPersistence(trip.assignedTruck); // Await for Persistence clear
-            }
-
-            trip.assignedTruck = plate;
-            trip.assignedSlot = slotIndex;
-
-            // Forzar recálculo de ubicación para el camión de destino para el día siguiente.
-            clearTruckPersistence(plate);
-
-            await api.saveTrip(trip); // SAVE API
-            await loadData();
-        }
-
-        function exportToCSV() {
-            let csv = 'Matrícula,Ubicación,Slot,Tipo,Cliente,Conductor,Origen,Destino,Fecha Carga,Fecha Descarga,Urgente,Grupaje,PG,EP,PP,CR,Hora Aviso,Avisado,Fuera de Servicio,Zonas Camión,Zona Viaje,Fecha Creación,Fecha Eliminación\n'; // MODIFIED HEADER
-            const dateFilter = document.getElementById('dateFilter').value;
-            const selectedZoneFilter = document.getElementById('zoneFilter').value;
-
-            let filteredTrucks = trucks.filter(t => isTruckActiveForDate(t, dateFilter));
-
-            if (selectedZoneFilter !== 'ALL') {
-                filteredTrucks = filteredTrucks.filter(t => t.zones.includes(selectedZoneFilter));
-            }
-
-            filteredTrucks.forEach(truck => {
-                const plate = truck.plate;
-                // Usamos getTruckSuggestedLocation para obtener la ubicación de partida del día
-                const location = getTruckSuggestedLocation(plate, dateFilter) || '';
-                const isOutOfService = isTruckOutOfService(plate, dateFilter) ? 'SI' : 'NO';
-                const creationDate = truck.creationDate || '';
-                const deletionDate = truck.deletionDate || '';
-                const truckZones = truck.zones ? truck.zones.join('|') : '';
-
-                for (let i = 0; i < 4; i++) {
-                    // MODIFIED: Get ALL trips for the slot
-                    const assignedTrips = trips.filter(t => t.assignedTruck === plate && t.assignedSlot === i && t.loadDate === dateFilter);
-                    const slotType = i % 2 === 0 ? `SALIDA ${Math.floor(i / 2) + 1}` : `RETORNO ${Math.floor(i / 2) + 1}`;
-
-                    if (assignedTrips.length > 0) {
-                        assignedTrips.forEach(trip => {
-                            const isNotifiedText = trip.isNotified ? 'SI' : 'NO';
-                            const isUrgentText = trip.isUrgent ? 'SI' : 'NO';
-                            const isGroupageText = trip.isGroupage ? 'SI' : 'NO'; // NEW LINE
-                            const notifyTime = trip.notifyTime || '';
-                            const tripZone = trip.zone || '';
-                            const tripCR = getTripCR(trip);
-                            // MODIFIED ROW
-                            csv += `"${plate}","${location}","${slotType}","${trip.type === 'departure' ? 'SALIDA' : 'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg || 0}","${trip.ep || 0}","${trip.pp || 0}","${tripCR}","${notifyTime}","${isNotifiedText}","${isOutOfService}","${truckZones}","${tripZone}","${creationDate}","${deletionDate}"\n`;
+                    input.addEventListener('change', () => {
+                        selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(innerInput => {
+                            const innerLabel = innerInput.nextElementSibling;
+                            const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
+                            innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${innerBaseColor}-800`);
+                            innerLabel.classList.add(`bg-${innerBaseColor}-500`);
                         });
-                    } else {
-                        csv += `"${plate}","${location}","${slotType}","","","","","","","","","","","","","","","","${isOutOfService}","${truckZones}","","${creationDate}","${deletionDate}"\n`;
+                        zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${baseColor}-800`);
+                        zoneLabel.classList.remove(`bg-${baseColor}-500`);
+                    });
+                });
+            }
+
+            // ==========================================
+            // FUNCIÓN DROP (MODIFICADA PARA ENFORZAR EXCLUSIVIDAD DE CARGA COMPLETA)
+            // ==========================================
+            async function drop(ev, plate, slotIndex) {
+                ev.preventDefault();
+                document.querySelectorAll('.drop-zone').forEach(el => el.classList.remove('drag-over'));
+
+                const tripId = parseInt(ev.dataTransfer.getData("text/plain"));
+                const originalTruckPlate = ev.dataTransfer.getData("text/originalTruckPlate");
+                const trip = trips.find(t => t.id === tripId);
+
+                if (!trip) return;
+
+                const dateFilter = document.getElementById('dateFilter').value;
+
+                // --- Caso 1: Desasignar a pendientes (plate === null) ---
+                if (plate === null) {
+                    const plateToRecalculate = trip.assignedTruck || originalTruckPlate;
+
+                    trip.assignedTruck = null;
+                    trip.assignedSlot = null;
+                    await api.saveTrip(trip); // SAVE API
+
+                    if (plateToRecalculate) {
+                        clearTruckPersistence(plateToRecalculate);
+                    }
+
+                    await loadData(); // Reload to sync
+                    return;
+                }
+
+                // --- Caso 2: Asignar a un camión (plate !== null) ---
+
+                const targetTruck = trucks.find(t => t.plate === plate);
+
+                if (targetTruck && isTruckOutOfService(targetTruck.plate, dateFilter)) {
+                    alert(`¡Error! No puedes asignar un viaje al camión ${targetTruck.plate} porque está "Fuera de Servicio" en esta fecha.`);
+                    return;
+                }
+
+                if (dateFilter && trip.loadDate !== dateFilter) {
+                    alert(`¡Error! Este viaje es para el ${formatDate(trip.loadDate)} y estás viendo la planificación del ${formatDate(dateFilter)}.`);
+                    return;
+                }
+
+                const incomingTripType = ev.dataTransfer.getData("text/tripType");
+                const dropSlotType = ev.currentTarget.getAttribute('data-slottype');
+
+                if (incomingTripType !== dropSlotType) {
+                    alert(`¡Error! No puedes asignar un viaje de ${incomingTripType === 'departure' ? 'SALIDA' : 'RETORNO'} en un hueco de ${dropSlotType === 'departure' ? 'SALIDA' : 'RETORNO'}.`);
+                    return;
+                }
+
+                // =========================================================================
+                // LÓGICA DE EXCLUSIVIDAD DE CARGA COMPLETA (COMP) Y STACKING DE GRUPAJE (GRU)
+                // =========================================================================
+
+                const assignedTripsInSlot = trips.filter(t =>
+                    t.assignedTruck === plate &&
+                    t.assignedSlot === slotIndex &&
+                    t.loadDate === dateFilter &&
+                    t.id !== tripId // Excluye el viaje que se está moviendo (si ya estaba en este slot)
+                );
+
+                const isSlotOccupied = assignedTripsInSlot.length > 0;
+                const isSlotOccupiedByFullLoad = assignedTripsInSlot.some(t => t.isGroupage === false);
+
+                // Regla 1: Viaje entrante es COMPLETO
+                if (trip.isGroupage === false) {
+                    if (isSlotOccupied) {
+                        alert(`¡Error! Una Carga COMPLETA solo puede ocupar un hueco completamente vacío.`);
+                        return;
                     }
                 }
-            });
 
-            const unassignedTypeFilter = document.getElementById('unassignedTypeFilter').value;
-            let unassigned = trips.filter(t => t.assignedTruck === null && t.loadDate === dateFilter);
+                // Regla 2: Viaje entrante es GRUPAJE
+                else if (trip.isGroupage === true) {
+                    if (isSlotOccupiedByFullLoad) {
+                        alert(`¡Error! No puedes asignar un Grupaje a un hueco que ya contiene una Carga Completa.`);
+                        return;
+                    }
+                    // Si el slot está vacío o solo contiene otros Grupajes, la asignación es permitida.
+                }
+                // =========================================================================
 
-            if (selectedZoneFilter !== 'ALL') {
-                unassigned = unassigned.filter(t => t.zone === selectedZoneFilter);
+                // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la persistencia del camión anterior.
+                if (trip.assignedTruck && trip.assignedTruck !== plate) {
+                    await clearTruckPersistence(trip.assignedTruck); // Await for Persistence clear
+                }
+
+                trip.assignedTruck = plate;
+                trip.assignedSlot = slotIndex;
+
+                // Forzar recálculo de ubicación para el camión de destino para el día siguiente.
+                clearTruckPersistence(plate);
+
+                await api.saveTrip(trip); // SAVE API
+                await loadData();
             }
 
-            if (unassignedTypeFilter === 'GROUPAGE') {
-                unassigned = unassigned.filter(t => t.isGroupage === true);
-            } else if (unassignedTypeFilter === 'FULL_LOAD') {
-                unassigned = unassigned.filter(t => t.isGroupage === false);
+            function exportToCSV() {
+                let csv = 'Matrícula,Ubicación,Slot,Tipo,Cliente,Conductor,Origen,Destino,Fecha Carga,Fecha Descarga,Urgente,Grupaje,PG,EP,PP,CR,Hora Aviso,Avisado,Fuera de Servicio,Zonas Camión,Zona Viaje,Fecha Creación,Fecha Eliminación\n'; // MODIFIED HEADER
+                const dateFilter = document.getElementById('dateFilter').value;
+                const selectedZoneFilter = document.getElementById('zoneFilter').value;
+
+                let filteredTrucks = trucks.filter(t => isTruckActiveForDate(t, dateFilter));
+
+                if (selectedZoneFilter !== 'ALL') {
+                    filteredTrucks = filteredTrucks.filter(t => t.zones.includes(selectedZoneFilter));
+                }
+
+                filteredTrucks.forEach(truck => {
+                    const plate = truck.plate;
+                    // Usamos getTruckSuggestedLocation para obtener la ubicación de partida del día
+                    const location = getTruckSuggestedLocation(plate, dateFilter) || '';
+                    const isOutOfService = isTruckOutOfService(plate, dateFilter) ? 'SI' : 'NO';
+                    const creationDate = truck.creationDate || '';
+                    const deletionDate = truck.deletionDate || '';
+                    const truckZones = truck.zones ? truck.zones.join('|') : '';
+
+                    for (let i = 0; i < 4; i++) {
+                        // MODIFIED: Get ALL trips for the slot
+                        const assignedTrips = trips.filter(t => t.assignedTruck === plate && t.assignedSlot === i && t.loadDate === dateFilter);
+                        const slotType = i % 2 === 0 ? `SALIDA ${Math.floor(i / 2) + 1}` : `RETORNO ${Math.floor(i / 2) + 1}`;
+
+                        if (assignedTrips.length > 0) {
+                            assignedTrips.forEach(trip => {
+                                const isNotifiedText = trip.isNotified ? 'SI' : 'NO';
+                                const isUrgentText = trip.isUrgent ? 'SI' : 'NO';
+                                const isGroupageText = trip.isGroupage ? 'SI' : 'NO'; // NEW LINE
+                                const notifyTime = trip.notifyTime || '';
+                                const tripZone = trip.zone || '';
+                                const tripCR = getTripCR(trip);
+                                // MODIFIED ROW
+                                csv += `"${plate}","${location}","${slotType}","${trip.type === 'departure' ? 'SALIDA' : 'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg || 0}","${trip.ep || 0}","${trip.pp || 0}","${tripCR}","${notifyTime}","${isNotifiedText}","${isOutOfService}","${truckZones}","${tripZone}","${creationDate}","${deletionDate}"\n`;
+                            });
+                        } else {
+                            csv += `"${plate}","${location}","${slotType}","","","","","","","","","","","","","","","","${isOutOfService}","${truckZones}","","${creationDate}","${deletionDate}"\n`;
+                        }
+                    }
+                });
+
+                const unassignedTypeFilter = document.getElementById('unassignedTypeFilter').value;
+                let unassigned = trips.filter(t => t.assignedTruck === null && t.loadDate === dateFilter);
+
+                if (selectedZoneFilter !== 'ALL') {
+                    unassigned = unassigned.filter(t => t.zone === selectedZoneFilter);
+                }
+
+                if (unassignedTypeFilter === 'GROUPAGE') {
+                    unassigned = unassigned.filter(t => t.isGroupage === true);
+                } else if (unassignedTypeFilter === 'FULL_LOAD') {
+                    unassigned = unassigned.filter(t => t.isGroupage === false);
+                }
+
+                unassigned.forEach(trip => {
+                    const isUrgentText = trip.isUrgent ? 'SI' : 'NO';
+                    const isGroupageText = trip.isGroupage ? 'SI' : 'NO'; // NEW LINE
+                    const tripZone = trip.zone || '';
+                    const tripCR = getTripCR(trip);
+                    // MODIFIED ROW
+                    csv += `SIN ASIGNAR,-,"-","${trip.type === 'departure' ? 'SALIDA' : 'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg || 0}","${trip.ep || 0}","${trip.pp || 0}","${tripCR}",-,"NO","NO",-,"${tripZone}",-,"-"\n`;
+                });
+
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", `planning_trafico_${dateFilter}_${selectedZoneFilter}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             }
 
-            unassigned.forEach(trip => {
-                const isUrgentText = trip.isUrgent ? 'SI' : 'NO';
-                const isGroupageText = trip.isGroupage ? 'SI' : 'NO'; // NEW LINE
-                const tripZone = trip.zone || '';
-                const tripCR = getTripCR(trip);
-                // MODIFIED ROW
-                csv += `SIN ASIGNAR,-,"-","${trip.type === 'departure' ? 'SALIDA' : 'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg || 0}","${trip.ep || 0}","${trip.pp || 0}","${tripCR}",-,"NO","NO",-,"${tripZone}",-,"-"\n`;
-            });
+            function printPlanning() {
+                window.print();
+            }
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `planning_trafico_${dateFilter}_${selectedZoneFilter}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
+            document.onkeydown = (evt) => { if (evt.keyCode == 27) closeModal(); };
 
-        function printPlanning() {
-            window.print();
-        }
-
-        document.onkeydown = (evt) => { if (evt.keyCode == 27) closeModal(); };
-
-        loadData(); 
+            loadData(); 
     </script>
 </body>
 
