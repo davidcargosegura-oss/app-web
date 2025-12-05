@@ -496,6 +496,15 @@
                             class="w-full border-slate-300 rounded text-sm focus:ring-red-500 focus:border-red-500">
                     </div>
                 </div>
+
+                <!-- NEW: Destination Zone Selector -->
+                <div class="bg-indigo-50 p-3 rounded border border-indigo-200">
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Zona Destino (Para
+                        actualización automática)</label>
+                    <div id="tripDestinationZoneSelector" class="flex flex-wrap gap-2">
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Carga</label>
@@ -1229,7 +1238,10 @@
             // NEW: Set default for groupage (false)
             document.getElementById('isGroupage').checked = false;
 
+            document.getElementById('isGroupage').checked = false;
+
             renderTripZoneSelector();
+            renderTripDestinationZoneSelector(); // NEW
             togglePalletInputs(); // Muestra/oculta los palets según el estado inicial
             document.getElementById('modal').classList.remove('hidden');
         }
@@ -1259,6 +1271,7 @@
             document.getElementById('pp').value = trip.pp || 0;
 
             renderTripZoneSelector(trip.zone);
+            renderTripDestinationZoneSelector(trip.destinationZone); // NEW
             togglePalletInputs(); // Muestra/oculta los palets según el estado del viaje
 
             document.getElementById('modal').classList.remove('hidden');
@@ -1286,6 +1299,10 @@
             const zoneInput = document.querySelector('input[name="tripZone"]:checked');
             const zone = zoneInput ? zoneInput.value : null;
 
+            // NEW: Get selected destination zone
+            const destZoneInput = document.querySelector('input[name="tripDestinationZone"]:checked');
+            const destinationZone = destZoneInput ? destZoneInput.value : null;
+
             const pg = parseInt(document.getElementById('pg').value) || 0;
             const ep = parseInt(document.getElementById('ep').value) || 0;
             const pp = parseInt(document.getElementById('pp').value) || 0;
@@ -1294,6 +1311,7 @@
                 id: id,
                 client, driver, origin, destination, loadDate, unloadDate, type,
                 isUrgent, isGroupage, zone,
+                destinationZone, // NEW
                 pg, ep, pp
             };
 
