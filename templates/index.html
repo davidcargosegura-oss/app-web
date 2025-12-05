@@ -588,6 +588,14 @@
             return compareDates(dateStr, today) < 0;
         }
 
+        function isTruckActiveForDate(truck, date) {
+            // If truck created AFTER date, it wasn't active yet.
+            if (compareDates(truck.creationDate, date) > 0) return false;
+            // If truck deleted BEFORE or ON date, it's not active.
+            if (truck.deletionDate && compareDates(truck.deletionDate, date) <= 0) return false;
+            return true;
+        }
+
 
 
         const api = {
