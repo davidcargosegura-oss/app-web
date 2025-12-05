@@ -572,6 +572,14 @@
 
         const OLD_DATE = '2000-01-01';
 
+        /**
+         * Checks if a date is before today.
+         */
+        function isOverdue(dateStr) {
+            const today = new Date().toISOString().split('T')[0];
+            return compareDates(dateStr, today) < 0;
+        }
+
         const api = {
             async getInitialData() {
                 const res = await fetch('/api/initial-data');
@@ -579,25 +587,11 @@
                 return await res.json();
             },
             async saveTruck(truck) {
-
-                /**
-                 * Checks if a date is before today.
-                 */
-                function isOverdue(dateStr) {
-                    const today = new Date().toISOString().split('T')[0];
-                    return compareDates(dateStr, today) < 0;
-                }
-
-                const api = {
-                    async getInitialData() {
-                        const res = await fetch('/api/initial-data');
-                        if (!res.ok) throw new Error(await res.text());
-                        return await res.json();
-                    },
-                    async saveTruck(truck) {
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(truck)
-                    });
+                const res = await fetch('/api/trucks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(truck)
+                });
                 if (!res.ok) throw new Error(await res.text());
                 return await res.json();
             },
