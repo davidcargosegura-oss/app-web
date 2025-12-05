@@ -1044,7 +1044,7 @@
                            placeholder="Ubicación"
                            class="truck-location-input ${isOutOfService ? 'border-red-500' : ''}" 
                            value="${displayLocation}"
-                           oninput="updateTruckLocation('${plate}', this.value)"
+                           onchange="updateTruckLocation('${plate}', this.value)"
                            ondblclick="event.stopPropagation();">
 
                     <button onclick="toggleOutOfService('${plate}')"
