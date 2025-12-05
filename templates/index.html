@@ -596,6 +596,65 @@
             return true;
         }
 
+        // --- TRUCK HELPERS (RESTORED) ---
+
+        function clearTruckPersistence(plate) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (truck) {
+                truck.locationLastUpdatedDate = '2000-01-01'; // Force update on next check
+                // We do NOT clear location here, we just invalidate the "freshness" so logic runs again
+            }
+        }
+
+        function updateTruckLocation(plate) {
+            const input = document.getElementById(`location-${plate}`);
+            const truck = trucks.find(t => t.plate === plate);
+            if (truck) {
+                truck.location = input.value;
+                truck.isLocationManual = true; // User manually set it
+                api.saveTruck(truck); // Autosave
+            }
+        }
+
+        function getTruckSuggestedLocation(truck, currentDate, forceRecalculate = false) {
+            // 1. If manual override is active for this day/logic... (implied by isLocationManual flag check below)
+
+            // 2. Find the LAST trip this truck completed BEFORE or ON this date.
+            // Trips sorted by unloadDate DESC? No, trips is raw list.
+
+            // Filter trips for this truck that ended BEFORE or ON currentDate
+            const completedTrips = trips.filter(t =>
+                t.assignedTruck === truck.plate &&
+                compareDates(t.unloadDate, currentDate) <= 0
+            );
+
+            if (completedTrips.length === 0) return truck.location || ''; // No history
+
+            // Sort by unloadDate descending (latest first)
+            completedTrips.sort((a, b) => compareDates(b.unloadDate, a.unloadDate));
+            const lastCompletedTrip = completedTrips[0];
+
+            const calculatedLocation = lastCompletedTrip.destination;
+
+            // Update Truck State if new info
+            if (calculatedLocation) {
+                if (compareDates(currentDate, truck.locationLastUpdatedDate) >= 0 || truck.isLocationManual) {
+                    truck.location = calculatedLocation;
+                    truck.locationLastUpdatedDate = currentDate;
+                    truck.isLocationManual = false;
+
+                    // NEW: Auto-update zone if the trip has a Destination Zone
+                    if (lastCompletedTrip.destinationZone) {
+                        truck.zones = [lastCompletedTrip.destinationZone]; // Replacing zones
+                    }
+
+                    api.saveTruck(truck);
+                }
+                return calculatedLocation;
+            }
+            return truck.location || '';
+        }
+
 
 
         const api = {
