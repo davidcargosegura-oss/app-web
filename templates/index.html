@@ -1371,9 +1371,53 @@
             ev.currentTarget.classList.add('drag-over');
         }
 
-        document.addEventListener('dragleave', e => {
-            if (e.target.classList.contains('drop-zone')) e.target.classList.remove('drag-over');
         });
+
+        // NEW: Render Destination Zone Selector (Clone needed for different ID/Name)
+        function renderTripDestinationZoneSelector(selectedZone = null) {
+            const selector = document.getElementById('tripDestinationZoneSelector');
+            if (!selector) return;
+            selector.innerHTML = ZONES.map(z => {
+                const isChecked = z.name === selectedZone ? 'checked' : '';
+                const baseColor = z.baseColor;
+
+                const selectedClasses = isChecked
+                    ? `bg-${baseColor}-700 outline outline-4 outline-offset-2 outline-${baseColor}-800`
+                    : '';
+
+                return `
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" 
+                               name="tripDestinationZone" 
+                               value="${z.name}" 
+                               ${isChecked}
+                               class="hidden">
+                        <span class="zone-label text-[10px] font-bold py-1 px-2 rounded-full border-2 border-${baseColor}-400 transition-all 
+                                     bg-${baseColor}-500 text-white 
+                                     hover:bg-${baseColor}-600 
+                                     ${selectedClasses}">
+                            ${z.name}
+                        </span>
+                    </label>
+                `;
+            }).join('');
+
+            selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(input => {
+                const zoneLabel = input.nextElementSibling;
+                const baseColor = ZONE_MAP[input.value].baseColor;
+
+                input.addEventListener('change', () => {
+                    selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(innerInput => {
+                        const innerLabel = innerInput.nextElementSibling;
+                        const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
+                        innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${innerBaseColor}-800`);
+                        innerLabel.classList.add(`bg-${innerBaseColor}-500`);
+                    });
+                    zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`, `outline-offset-2`, `outline-${baseColor}-800`);
+                    zoneLabel.classList.remove(`bg-${baseColor}-500`);
+                });
+            });
+        }
 
         // ==========================================
         // FUNCIÓN DROP (MODIFICADA PARA ENFORZAR EXCLUSIVIDAD DE CARGA COMPLETA)
