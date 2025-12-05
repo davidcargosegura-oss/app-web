@@ -1691,7 +1691,7 @@
 
             // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la persistencia del camión anterior.
             if (trip.assignedTruck && trip.assignedTruck !== plate) {
-                clearTruckPersistence(trip.assignedTruck);
+                await clearTruckPersistence(trip.assignedTruck); // Await for Persistence clear
             }
 
             trip.assignedTruck = plate;
