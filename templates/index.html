@@ -1508,6 +1508,12 @@
 
         function closeModal() {
             document.getElementById('modal').classList.add('hidden');
+            document.getElementById('tripForm').reset();
+        }
+
+        async function deleteTrip() {
+            const idToDelete = parseInt(document.getElementById('editTripId').value);
+            const trip = trips.find(t => t.id === idToDelete);
 
             if (confirm(`¿Estás seguro de eliminar el viaje?`)) {
 
@@ -1515,9 +1521,14 @@
                     clearTruckPersistence(trip.assignedTruck);
                 }
 
-                await api.deleteTrip(idToDelete);
-                await loadData();
-                closeModal();
+                try {
+                    await api.deleteTrip(idToDelete);
+                    await loadData();
+                    closeModal();
+                } catch (error) {
+                    console.error(error);
+                    alert("Error eliminando viaje: " + error.message);
+                }
             }
         }
 
@@ -1724,3 +1735,6 @@
 </body>
 
 </html>
+
+</html>
+
