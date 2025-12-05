@@ -1730,11 +1730,21 @@
             trip.assignedTruck = plate;
             trip.assignedSlot = slotIndex;
 
-            // Forzar recálculo de ubicación para el camión de destino para el día siguiente.
-            clearTruckPersistence(plate);
+            // NEW: If we assign a trip, we allow the location to be auto-updated.
+            // This overrides any previous manual setting (but manual setting is saved in manualLocation).
+            const assignedTruckObj = trucks.find(t => t.plate === plate);
+            if (assignedTruckObj) {
+                assignedTruckObj.isLocationManual = false;
+                // We must save this change to persist the "auto mode" re-enabling.
+                await api.saveTruck(assignedTruckObj);
+            }
+        }
 
-            await api.saveTrip(trip); // SAVE API
-            await loadData();
+        // Forzar recálculo de ubicación para el camión de destino para el día siguiente.
+        clearTruckPersistence(plate);
+
+        await api.saveTrip(trip); // SAVE API
+        await loadData();
         }
 
         function exportToCSV() {
