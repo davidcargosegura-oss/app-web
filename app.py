@@ -58,7 +58,8 @@ class Truck(db.Model):
     creation_date = db.Column(db.String(20), nullable=False)
     deletion_date = db.Column(db.String(20), nullable=True)
     is_location_manual = db.Column(db.Boolean, default=False)
-    zones_str = db.Column(db.String(200), default='') 
+    zones_str = db.Column(db.String(200), default='')
+    manual_location = db.Column(db.String(100), default='') # NEW: Persist manual input
 
     def to_dict(self):
         return {
@@ -68,7 +69,8 @@ class Truck(db.Model):
             'creationDate': self.creation_date,
             'deletionDate': self.deletion_date,
             'isLocationManual': self.is_location_manual,
-            'zones': self.zones_str.split(',') if self.zones_str else []
+            'zones': self.zones_str.split(',') if self.zones_str else [],
+            'manualLocation': self.manual_location # NEW
         }
 
 class Trip(db.Model):
@@ -184,6 +186,18 @@ def init_db_on_first_request():
             print(f"Tablas existentes antes de check: {tables}")
             
             db.create_all()
+
+            # MIGRATION: Check for new columns
+            try:
+                # Check manual_location in truck
+                columns = [c['name'] for c in inspector.get_columns('truck')]
+                if 'manual_location' not in columns:
+                    print("Migrando base de datos: Añadiendo manual_location a truck...")
+                    with db.engine.connect() as conn:
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN manual_location VARCHAR(100) DEFAULT ''"))
+                        conn.commit()
+            except Exception as e:
+                print(f"Error checking/migrating schema: {e}")
             
             if not User.query.filter_by(username='davidp').first():
                 u = User(username='davidp', is_admin=True)
@@ -258,6 +272,7 @@ def save_truck():
     t.deletion_date = d.get('deletionDate')
     t.is_location_manual = d.get('isLocationManual', False)
     t.zones_str = ','.join(d.get('zones', []))
+    t.manual_location = d.get('manualLocation', '') # NEW
     db.session.commit()
     return jsonify(t.to_dict())
 
