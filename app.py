@@ -77,6 +77,7 @@ class Trip(db.Model):
     driver = db.Column(db.String(100), default='')
     origin = db.Column(db.String(100), nullable=False)
     destination = db.Column(db.String(100), nullable=False)
+    destination_zone = db.Column(db.String(50), nullable=True) # NEW: Destination Zone
     load_date = db.Column(db.String(20), nullable=False)
     unload_date = db.Column(db.String(20), nullable=False)
     
@@ -104,6 +105,7 @@ class Trip(db.Model):
             'driver': self.driver,
             'origin': self.origin,
             'destination': self.destination,
+            'destinationZone': self.destination_zone, # NEW
             'loadDate': self.load_date,
             'unloadDate': self.unload_date,
             'assignedTruck': self.assigned_truck_plate,
@@ -286,6 +288,7 @@ def save_trip():
     t.driver = d.get('driver')
     t.origin = d.get('origin')
     t.destination = d.get('destination')
+    t.destination_zone = d.get('destinationZone') # NEW
     t.load_date = d.get('loadDate')
     t.unload_date = d.get('unloadDate')
     
