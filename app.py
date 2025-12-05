@@ -150,7 +150,7 @@ class ProtectedAdminView(ModelView):
 
     def on_model_change(self, form, model, is_created):
         if 'password' in form and form.password.data:
-            model.password_hash = generate_password_hash(form.password.data)
+            model.password_hash = generate_password_hash(form.password.data, method='pbkdf2:sha256')
         super(ProtectedAdminView, self).on_model_change(form, model, is_created)
 
 class MyAdminIndexView(AdminIndexView):
