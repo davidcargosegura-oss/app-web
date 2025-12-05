@@ -100,6 +100,8 @@ class Trip(db.Model):
     notify_time = db.Column(db.String(20), default="")
     is_notified = db.Column(db.Boolean, default=False)
 
+    assigned_truck = db.relationship('Truck', backref=db.backref('trips', lazy=True))
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -122,7 +124,6 @@ class Trip(db.Model):
             'notifyTime': self.notify_time,
             'isNotified': self.is_notified
         }
-
 # ...
 
 @app.before_request
@@ -162,48 +163,10 @@ def init_db_on_first_request():
         except Exception as e:
             print(f"Error inicializando base de datos: {e}")
 
-@app.route('/api/trucks', methods=['POST'])
-@login_required
-def save_truck():
-    d = request.json
-    t = Truck.query.filter_by(plate=d.get('plate')).first()
-    if not t:
-        t = Truck(plate=d.get('plate'))
-        db.session.add(t)
-    t.location = d.get('location', '')
-    t.location_last_updated = d.get('locationLastUpdatedDate', '2000-01-01')
-    t.creation_date = d.get('creationDate', '2000-01-01')
-    t.deletion_date = d.get('deletionDate')
-    t.is_location_manual = d.get('isLocationManual', False)
-    t.is_zone_manual = d.get('isZoneManual', False) # NEW
-    t.zones_str = ','.join(d.get('zones', []))
-    t.manual_location = d.get('manualLocation', '')
-    db.session.commit()
-    return jsonify(t.to_dict())
 
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'type': self.type,
-            'client': self.client,
-            'driver': self.driver,
-            'origin': self.origin,
-            'destination': self.destination,
-            'destinationZone': self.destination_zone, # NEW
-            'loadDate': self.load_date,
-            'unloadDate': self.unload_date,
-            'assignedTruck': self.assigned_truck_plate,
-            'assignedSlot': self.assigned_slot,
-            'isUrgent': self.is_urgent,
-            'isGroupage': self.is_groupage,
-            'zone': self.zone,
-            'pg': self.pg,
-            'ep': self.ep,
-            'pp': self.pp,
-            'notifyTime': self.notify_time,
-            'isNotified': self.is_notified
-        }
+
+
 
 class DailyNote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
