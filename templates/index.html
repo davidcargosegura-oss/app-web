@@ -541,65 +541,85 @@
             return acc;
         }, {});
 
-        let trucks = [];
-        let trips = [];
-        let trucksFdsStatusByDate = {};
-        const api = {
+        // Helper to get Trip CR (Calculated Result/Ratio)
+        function getTripCR(trip) {
+            // Logic: 1 PG = 1, 1 EP = 0.8, 1 PP = 0.666
+            // Total = sum of all.
+            const pg = (trip.pg || 0) * 1.0;
+            const ep = (trip.ep || 0) * 0.8;
+            const pp = (trip.pp || 0) * 0.666;
+            return pg + ep + pp;
+        }
+
+        /**
+         * Compares two dates (string YYYY-MM-DD).
+         * Returns -1 if a < b, 0 if a === b, 1 if a > b.
+         */
+        function compareDates(a, b) {
+            if (!a && !b) return 0;
+            if (!a) return -1;
+            if (!b) return 1;
+            if (a === b) return 0;
+            return a < b ? -1 : 1;
+        }
+
+        const OLD_DATE = '2000-01-01'; // Define OLD_DATE constant
+
             async getInitialData() {
-                const res = await fetch('/api/initial-data');
-                if (!res.ok) throw new Error(await res.text());
-                return await res.json();
-            },
+            const res = await fetch('/api/initial-data');
+            if (!res.ok) throw new Error(await res.text());
+            return await res.json();
+        },
             async saveTruck(truck) {
-                const res = await fetch('/api/trucks', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(truck)
-                });
-                if (!res.ok) throw new Error(await res.text());
-                return await res.json();
-            },
+            const res = await fetch('/api/trucks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(truck)
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return await res.json();
+        },
             async deleteTruck(plate) {
-                const res = await fetch(`/api/trucks/${plate}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error(await res.text());
-            },
+            const res = await fetch(`/api/trucks/${plate}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(await res.text());
+        },
             async saveTrip(trip) {
-                const res = await fetch('/api/trips', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(trip)
-                });
-                if (!res.ok) throw new Error(await res.text());
-                return await res.json();
-            },
+            const res = await fetch('/api/trips', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(trip)
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return await res.json();
+        },
             async deleteTrip(id) {
-                const res = await fetch(`/api/trips/${id}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error(await res.text());
-            },
+            const res = await fetch(`/api/trips/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(await res.text());
+        },
             async saveNote(date, type, content) {
-                const res = await fetch('/api/notes', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date, type, content })
-                });
-                if (!res.ok) throw new Error(await res.text());
-            },
+            const res = await fetch('/api/notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date, type, content })
+            });
+            if (!res.ok) throw new Error(await res.text());
+        },
             async toggleFds(plate, date, isOutOfService) {
-                const res = await fetch('/api/fds', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ plate, date, is_out_of_service: isOutOfService })
-                });
-                if (!res.ok) throw new Error(await res.text());
-            },
+            const res = await fetch('/api/fds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ plate, date, is_out_of_service: isOutOfService })
+            });
+            if (!res.ok) throw new Error(await res.text());
+        },
             async unassignDay(date) {
-                const res = await fetch('/api/unassign-day', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date })
-                });
-                if (!res.ok) throw new Error(await res.text());
-            }
+            const res = await fetch('/api/unassign-day', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date })
+            });
+            if (!res.ok) throw new Error(await res.text());
+        }
         };
 
         const OLD_DATE = '2000-01-01';
