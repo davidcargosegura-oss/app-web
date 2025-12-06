@@ -722,34 +722,83 @@
                 return (b.assignedSlot || 0) - (a.assignedSlot || 0);
             });
             const lastCompletedTrip = completedTrips[0];
+            let calculatedLocation = lastCompletedTrip.destination;
 
-            const calculatedLocation = lastCompletedTrip.destination;
+            // NEW PRIORITY LOGIC:
+            // If we have a Manual Location set, we prioritize it over historical trips 
+            // UNLESS the historical trip is "Fresh" (unloaded *today* or *future* relative to check date).
+            // This ensures that if I set "Murcia", assign a trip, and unassign it, it goes back to "Murcia" 
+            // instead of going back to the trip from 3 days ago ("Alicante").
+            if (truck.manualLocation && truck.manualLocation.trim() !== '') {
+                const tripIsFresh = compareDates(lastCompletedTrip.unloadDate, currentDate) >= 0;
+                if (!tripIsFresh) {
+                    // Historical trip is old. Prefer Manual Default.
+                    calculatedLocation = truck.manualLocation;
+                }
+            }
 
             // Update Truck State if new info
             if (calculatedLocation) {
-                if (compareDates(currentDate, truck.locationLastUpdatedDate) >= 0 && !truck.isLocationManual) {
+                let needsSave = false;
+                let sourceIsManualFallback = false;
+
+                // Determine if we're using manual fallback (not a fresh trip)
+                if (truck.manualLocation && truck.manualLocation.trim() !== '') {
+                    const tripIsFresh = compareDates(lastCompletedTrip.unloadDate, currentDate) >= 0;
+                    sourceIsManualFallback = !tripIsFresh && (calculatedLocation === truck.manualLocation);
+                }
+
+                // Update Location if conditions are met
+                if (!truck.isLocationManual && truck.location !== calculatedLocation) {
                     truck.location = calculatedLocation;
                     truck.locationLastUpdatedDate = currentDate;
-                    truck.isLocationManual = false;
 
-                    // NEW: Auto-update zone if the trip has a Destination Zone
-                    // IMPROVED: Revert logic. If fallback trip has dest zone, use it. 
-                    // Fallback 2: Check if the LOCATION NAME matches a zone name (e.g. "Murcia" -> "MU")
-
-                    if (lastCompletedTrip.destinationZone) {
-                        truck.zones = [lastCompletedTrip.destinationZone];
+                    // If using manual fallback, mark as manual so it sticks
+                    if (sourceIsManualFallback) {
+                        truck.isLocationManual = true;
                     } else {
-                        // Infer from location string?
+                        truck.isLocationManual = false;
+                    }
+
+                    needsSave = true;
+                }
+
+                // Update Zones only if not manually locked
+                if (!truck.isZoneManual) {
+                    let newZones = [];
+
+                    if (sourceIsManualFallback) {
+                        // Manual fallback: infer zone from location name
                         const matchedZone = ZONES.find(z => z.name.toLowerCase() === calculatedLocation.toLowerCase());
                         if (matchedZone) {
-                            truck.zones = [matchedZone.name];
+                            newZones = [matchedZone.name];
+                        }
+                    } else {
+                        // Trip-based: use trip's destination zone or infer
+                        if (lastCompletedTrip.destinationZone) {
+                            newZones = [lastCompletedTrip.destinationZone];
                         } else {
-                            truck.zones = [];
+                            const matchedZone = ZONES.find(z => z.name.toLowerCase() === calculatedLocation.toLowerCase());
+                            if (matchedZone) {
+                                newZones = [matchedZone.name];
+                            }
                         }
                     }
 
+                    // Check if zones actually changed
+                    const currentZonesStr = truck.zones.slice().sort().join(',');
+                    const newZonesStr = newZones.slice().sort().join(',');
+
+                    if (currentZonesStr !== newZonesStr) {
+                        truck.zones = newZones;
+                        needsSave = true;
+                    }
+                }
+
+                if (needsSave) {
                     api.saveTruck(truck);
                 }
+
                 return calculatedLocation;
             }
             return truck.location || '';
