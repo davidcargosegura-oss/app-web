@@ -1766,7 +1766,14 @@
                 trip.assignedSlot = null;
                 await api.saveTrip(trip); // SAVE API
 
+                // NUEVO: Si el camión tenía una ubicación manual guardada, restaurarla
                 if (plateToRecalculate) {
+                    const truckToRestore = trucks.find(t => t.plate === plateToRecalculate);
+                    if (truckToRestore && truckToRestore.manualLocation && truckToRestore.manualLocation.trim() !== '') {
+                        truckToRestore.location = truckToRestore.manualLocation;
+                        truckToRestore.isLocationManual = true;
+                        await api.saveTruck(truckToRestore);
+                    }
                     clearTruckPersistence(plateToRecalculate);
                 }
 
