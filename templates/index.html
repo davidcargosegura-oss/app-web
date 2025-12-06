@@ -609,29 +609,20 @@
             }
         }
 
-        function updateTruckLocation(plate) {
-            const input = document.getElementById(`location-${plate}`);
+        // NUEVO: Función simple para ubicación manual - solo guarda manualLocation
+        async function updateManualLocation(plate, input) {
             const truck = trucks.find(t => t.plate === plate);
             if (truck) {
-                const newLocation = input.value.trim();
+                const newManualLocation = input.value.trim();
+                truck.manualLocation = newManualLocation;
 
-                if (newLocation === '') {
-                    // Si el usuario borra la ubicación, permitir que el sistema la recalcule
-                    truck.location = '';
-                    truck.isLocationManual = false; // Resetear para que getTruckSuggestedLocation recalcule
-                } else {
-                    truck.location = newLocation;
-                    // Guardar como nueva ubicación manual base
-                    if (newLocation !== '') {
-                        truck.manualLocation = newLocation;
-                    }
-                    truck.isLocationManual = true;
-                    // Actualizar la fecha para rastrear cuándo se modificó manualmente
-                    truck.locationLastUpdatedDate = new Date().toISOString().split('T')[0];
+                try {
+                    await api.saveTruck(truck);
+                    // No llamar loadData() para evitar perder el foco del input
+                } catch (error) {
+                    console.error(error);
+                    alert("Error guardando ubicación manual: " + error.message);
                 }
-
-                api.saveTruck(truck); // Autosave
-                loadData(); // Recalcular ubicación si fue borrada
             }
         }
 
@@ -697,10 +688,7 @@
         }
 
         function getTruckSuggestedLocation(truck, currentDate, forceRecalculate = false) {
-            // 1. If manual override is active for this day/logic... (implied by isLocationManual flag check below)
-
-            // 2. Find the LAST trip this truck completed BEFORE or ON this date.
-            // Trips sorted by unloadDate DESC? No, trips is raw list.
+            // SIMPLIFICADO: Solo calcula ubicación por viajes. El campo manual es independiente.
 
             // Filter trips for this truck that ended BEFORE or ON currentDate
             const completedTrips = trips.filter(t =>
@@ -709,133 +697,55 @@
             );
 
             if (completedTrips.length === 0) {
-                // FALLBACK: If we have a manual location stored, use it.
-                if (truck.manualLocation && !truck.isLocationManual && truck.location !== truck.manualLocation) {
-                    // APPLY Fallback
-                    truck.location = truck.manualLocation;
-                    truck.isLocationManual = true;
-                    truck.locationLastUpdatedDate = currentDate;
-
-                    // If reverting to manual location, we might want to infer zones too, IF zones are not manually locked.
-                    if (!truck.isZoneManual) {
-                        const matchedZone = ZONES.find(z => z.name.toLowerCase() === truck.location.toLowerCase());
-                        if (matchedZone) {
-                            truck.zones = [matchedZone.name];
-                        } else {
-                            truck.zones = [];
-                        }
-                    }
-
-                    api.saveTruck(truck);
-                    return truck.manualLocation;
-                }
                 return truck.location || '';
             }
 
-            // Sort logic: Prioritize same-day trips (load AND unload today), then by date DESC, then by slot DESC
+            // Sort logic: Prioritize same-day trips, then by date DESC, then by slot DESC
             completedTrips.sort((a, b) => {
-                // 1. Trips that load AND unload today have highest priority
                 const aSameDay = (a.loadDate === currentDate && a.unloadDate === currentDate);
                 const bSameDay = (b.loadDate === currentDate && b.unloadDate === currentDate);
                 if (aSameDay && !bSameDay) return -1;
                 if (!aSameDay && bSameDay) return 1;
 
-                // 2. If both same-day or both not, sort by unloadDate DESC
                 const dateComparison = compareDates(b.unloadDate, a.unloadDate);
                 if (dateComparison !== 0) return dateComparison;
 
-                // 3. If same unload date, sort by assignedSlot DESC (rightmost wins)
                 return (b.assignedSlot || 0) - (a.assignedSlot || 0);
             });
+
             const lastCompletedTrip = completedTrips[0];
-            let calculatedLocation = lastCompletedTrip.destination;
+            const calculatedLocation = lastCompletedTrip.destination;
 
-            // NEW PRIORITY LOGIC:
-            // If we have a Manual Location set, we prioritize it over historical trips 
-            // UNLESS the historical trip is "Fresh" (unloaded *today* or *future* relative to check date).
-            // ALSO: Only apply manual location if we're viewing a date >= when the manual change was made
-            if (truck.manualLocation && truck.manualLocation.trim() !== '') {
-                const manualAppliesForThisDate = compareDates(currentDate, truck.locationLastUpdatedDate) >= 0;
-                const tripIsFresh = compareDates(lastCompletedTrip.unloadDate, currentDate) >= 0;
-
-                if (manualAppliesForThisDate && !tripIsFresh) {
-                    // Historical trip is old AND manual change applies to this date. Prefer Manual Default.
-                    calculatedLocation = truck.manualLocation;
-                }
-            }
-
-            // Update Truck State if new info
-            if (calculatedLocation) {
-                // PRIMERO: Si isLocationManual = true Y la fecha aplica, respetar ubicación manual
-                const locationManualApplies = truck.isLocationManual && compareDates(currentDate, truck.locationLastUpdatedDate || '2000-01-01') >= 0;
-                if (locationManualApplies) {
-                    return truck.location;
-                }
-
-                let needsSave = false;
-                let sourceIsManualFallback = false;
-
-                // Determine if we're using manual fallback (not a fresh trip)
-                if (truck.manualLocation && truck.manualLocation.trim() !== '') {
-                    const tripIsFresh = (lastCompletedTrip.unloadDate === currentDate);
-                    sourceIsManualFallback = !tripIsFresh && (calculatedLocation === truck.manualLocation);
-                }
-
-                // Update Location if conditions are met
-                if (!truck.isLocationManual && truck.location !== calculatedLocation) {
-                    truck.location = calculatedLocation;
-                    truck.locationLastUpdatedDate = currentDate;
-
-                    // If using manual fallback, mark as manual so it sticks
-                    if (sourceIsManualFallback) {
-                        truck.isLocationManual = true;
-                    } else {
-                        truck.isLocationManual = false;
-                    }
-
-                    needsSave = true;
-                }
+            // Solo actualizar truck.location si cambió
+            if (truck.location !== calculatedLocation) {
+                truck.location = calculatedLocation;
+                truck.locationLastUpdatedDate = currentDate;
 
                 // Update Zones only if not manually locked OR if viewing a date before the manual change
                 const zonesManualApplies = truck.isZoneManual && compareDates(currentDate, truck.zonesLastUpdatedDate || '2000-01-01') >= 0;
                 if (!zonesManualApplies) {
                     let newZones = [];
-
-                    if (sourceIsManualFallback) {
-                        // Manual fallback: infer zone from location name
+                    if (lastCompletedTrip.destinationZone) {
+                        newZones = [lastCompletedTrip.destinationZone];
+                    } else {
                         const matchedZone = ZONES.find(z => z.name.toLowerCase() === calculatedLocation.toLowerCase());
                         if (matchedZone) {
                             newZones = [matchedZone.name];
                         }
-                    } else {
-                        // Trip-based: use trip's destination zone or infer
-                        if (lastCompletedTrip.destinationZone) {
-                            newZones = [lastCompletedTrip.destinationZone];
-                        } else {
-                            const matchedZone = ZONES.find(z => z.name.toLowerCase() === calculatedLocation.toLowerCase());
-                            if (matchedZone) {
-                                newZones = [matchedZone.name];
-                            }
-                        }
                     }
 
-                    // Check if zones actually changed
                     const currentZonesStr = truck.zones.slice().sort().join(',');
                     const newZonesStr = newZones.slice().sort().join(',');
 
                     if (currentZonesStr !== newZonesStr) {
                         truck.zones = newZones;
-                        needsSave = true;
                     }
                 }
 
-                if (needsSave) {
-                    api.saveTruck(truck);
-                }
-
-                return calculatedLocation;
+                api.saveTruck(truck);
             }
-            return truck.location || '';
+
+            return calculatedLocation;
         }
 
 
@@ -1145,12 +1055,18 @@
                     <div class="flex justify-center gap-1 mt-1 mb-0">
                         ${ZONES.map(z => createZoneButton(truck.zones, z, truck.plate)).join('')}
                     </div>
+                    <div class="text-[9px] text-center mt-1">
+                        <span class="text-slate-300" title="Ubicación calculada por viajes">Auto:</span>
+                        <span class="text-white font-bold">${displayLocation || '-'}</span>
+                    </div>
                     <input type="text" 
-                           placeholder="Ubicación"
-                           class="truck-location-input ${isOutOfService ? 'border-red-500' : ''}" 
-                           value="${displayLocation}"
-                           onchange="updateTruckLocation('${plate}', this.value)"
-                           ondblclick="event.stopPropagation();">
+                           placeholder="📍 Manual"
+                           class="truck-location-input text-[10px] ${isOutOfService ? 'border-red-500' : ''}" 
+                           value="${truck.manualLocation || ''}"
+                           onchange="updateManualLocation('${plate}', this)"
+                           ondblclick="event.stopPropagation();"
+                           title="Ubicación manual (persiste siempre)"
+                           style="background: rgba(255,255,255,0.15); border: 1px dashed rgba(255,255,255,0.4);">
 
                     <button onclick="toggleOutOfService('${plate}')"
                             class="absolute -bottom-2 -right-2 ${isOutOfService ? 'bg-red-900 hover:bg-red-800' : 'bg-slate-500 hover:bg-slate-600'} text-white text-[9px] font-bold p-1 rounded-full shadow-lg transition transform hover:scale-105"
@@ -1767,24 +1683,14 @@
 
                 trip.assignedTruck = null;
                 trip.assignedSlot = null;
-                await api.saveTrip(trip); // SAVE API
+                await api.saveTrip(trip);
 
-                // NUEVO: Si el camión tenía una ubicación manual guardada, restaurarla
+                // Limpiar persistencia para forzar recálculo
                 if (plateToRecalculate) {
-                    const truckToRestore = trucks.find(t => t.plate === plateToRecalculate);
-                    if (truckToRestore && truckToRestore.manualLocation && truckToRestore.manualLocation.trim() !== '') {
-                        // Restaurar ubicación manual
-                        truckToRestore.location = truckToRestore.manualLocation;
-                        truckToRestore.isLocationManual = true;
-                        truckToRestore.locationLastUpdatedDate = new Date().toISOString().split('T')[0];
-                        await api.saveTruck(truckToRestore);
-                    } else {
-                        // Solo limpiar persistencia si NO hay ubicación manual que restaurar
-                        clearTruckPersistence(plateToRecalculate);
-                    }
+                    clearTruckPersistence(plateToRecalculate);
                 }
 
-                await loadData(); // Reload to sync
+                await loadData();
                 return;
             }
 
