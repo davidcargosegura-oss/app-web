@@ -126,42 +126,7 @@ class Trip(db.Model):
         }
 # ...
 
-@app.before_request
-def init_db_on_first_request():
-    global _db_initialized
-    if not _db_initialized:
-        try:
-            inspector = db.inspect(db.engine)
-            # ...
-            
-            db.create_all()
 
-            # MIGRATION: Check for new columns
-            try:
-                # Check manual_location and is_zone_manual in truck
-                columns = [c['name'] for c in inspector.get_columns('truck')]
-                with db.engine.connect() as conn:
-                    if 'manual_location' not in columns:
-                        print("Migrando base de datos: Añadiendo manual_location a truck...")
-                        conn.execute(text("ALTER TABLE truck ADD COLUMN manual_location VARCHAR(100) DEFAULT ''"))
-                    if 'is_zone_manual' not in columns:
-                        print("Migrando base de datos: Añadiendo is_zone_manual a truck...")
-                        conn.execute(text("ALTER TABLE truck ADD COLUMN is_zone_manual BOOLEAN DEFAULT 0"))
-                    conn.commit()
-            except Exception as e:
-                print(f"Error checking/migrating schema: {e}")
-            
-            if not User.query.filter_by(username='davidp').first():
-                u = User(username='davidp', is_admin=True)
-                u.set_password('admin')
-                db.session.add(u)
-                db.session.commit()
-                print("Admin 'davidp' creado.")
-            
-            _db_initialized = True
-            print("Base de datos inicializada correctamente.")
-        except Exception as e:
-            print(f"Error inicializando base de datos: {e}")
 
 
 
@@ -316,6 +281,7 @@ def save_truck():
     t.creation_date = d.get('creationDate', '2000-01-01')
     t.deletion_date = d.get('deletionDate')
     t.is_location_manual = d.get('isLocationManual', False)
+    t.is_zone_manual = d.get('isZoneManual', False) # NEW
     t.zones_str = ','.join(d.get('zones', []))
     t.manual_location = d.get('manualLocation', '') # NEW
     db.session.commit()
