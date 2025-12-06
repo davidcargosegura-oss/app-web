@@ -613,8 +613,23 @@
             const input = document.getElementById(`location-${plate}`);
             const truck = trucks.find(t => t.plate === plate);
             if (truck) {
-                truck.location = input.value;
-                truck.isLocationManual = true; // User manually set it
+                const newLocation = input.value.trim();
+
+                // Si el usuario borra la ubicación, usar manualLocation como fallback
+                if (newLocation === '' && truck.manualLocation) {
+                    truck.location = truck.manualLocation;
+                    truck.isLocationManual = true;
+                } else {
+                    truck.location = newLocation;
+                    // Guardar como nueva ubicación manual base
+                    if (newLocation !== '') {
+                        truck.manualLocation = newLocation;
+                    }
+                    truck.isLocationManual = true;
+                    // Actualizar la fecha para rastrear cuándo se modificó manualmente
+                    truck.locationLastUpdatedDate = new Date().toISOString().split('T')[0];
+                }
+
                 api.saveTruck(truck); // Autosave
             }
         }
@@ -715,10 +730,19 @@
                 return truck.location || '';
             }
 
-            // Sort logic: Date DESC, then AssignedSlot DESC (Rightmost > Leftmost)
+            // Sort logic: Prioritize same-day trips (load AND unload today), then by date DESC, then by slot DESC
             completedTrips.sort((a, b) => {
+                // 1. Trips that load AND unload today have highest priority
+                const aSameDay = (a.loadDate === currentDate && a.unloadDate === currentDate);
+                const bSameDay = (b.loadDate === currentDate && b.unloadDate === currentDate);
+                if (aSameDay && !bSameDay) return -1;
+                if (!aSameDay && bSameDay) return 1;
+
+                // 2. If both same-day or both not, sort by unloadDate DESC
                 const dateComparison = compareDates(b.unloadDate, a.unloadDate);
                 if (dateComparison !== 0) return dateComparison;
+
+                // 3. If same unload date, sort by assignedSlot DESC (rightmost wins)
                 return (b.assignedSlot || 0) - (a.assignedSlot || 0);
             });
             const lastCompletedTrip = completedTrips[0];
@@ -744,8 +768,19 @@
 
                 // Determine if we're using manual fallback (not a fresh trip)
                 if (truck.manualLocation && truck.manualLocation.trim() !== '') {
-                    const tripIsFresh = compareDates(lastCompletedTrip.unloadDate, currentDate) >= 0;
+                    const tripIsFresh = (lastCompletedTrip.unloadDate === currentDate);
                     sourceIsManualFallback = !tripIsFresh && (calculatedLocation === truck.manualLocation);
+                }
+
+                // NUEVO: Si isLocationManual = true, solo actualizar si el viaje es MÁS RECIENTE que la modificación manual
+                // Esto asegura que viajes antiguos no sobrescriban modificaciones manuales recientes
+                if (truck.isLocationManual) {
+                    // Verificar si el viaje es más reciente que la última modificación manual
+                    if (compareDates(lastCompletedTrip.unloadDate, truck.locationLastUpdatedDate) < 0) {
+                        // El viaje es más antiguo que la modificación manual, no tocarlo
+                        return truck.location;
+                    }
+                    // Si llegamos aquí, el viaje es igual o más reciente, podemos continuar
                 }
 
                 // Update Location if conditions are met
