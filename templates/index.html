@@ -532,6 +532,104 @@
         </div>
     </div>
 
+    <!-- MODAL DE CAMIÓN -->
+    <div id="truckModal"
+        class="fixed inset-0 bg-slate-900/70 hidden flex items-center justify-center z-50 backdrop-blur-sm no-print">
+        <div
+            class="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden scale-100 transition-transform border-t-4 border-indigo-600">
+            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center">
+                <h3 id="truckModalTitle" class="font-bold text-slate-800">Nuevo Camión</h3>
+                <button onclick="closeTruckModal()" class="text-slate-400 hover:text-red-600 transition">
+                    <i class="fa-solid fa-times text-lg"></i>
+                </button>
+            </div>
+            <form id="truckForm" onsubmit="saveTruckFromModal(event)" class="p-6 space-y-4">
+                <input type="hidden" id="editTruckPlate">
+                <input type="hidden" id="isNewTruck" value="true">
+
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Matrícula *</label>
+                    <input type="text" id="truckPlateInput" required
+                        class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500 uppercase font-mono font-bold">
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Remolque</label>
+                    <input type="text" id="truckTrailer"
+                        class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Conductor</label>
+                        <input type="text" id="truckDriverName"
+                            class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alias</label>
+                        <input type="text" id="truckDriverAlias"
+                            class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Teléfono</label>
+                        <input type="tel" id="truckDriverPhone"
+                            class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">DNI</label>
+                        <input type="text" id="truckDriverDni"
+                            class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Ubicación Manual</label>
+                    <input type="text" id="truckManualLocation" placeholder="Ej: Murcia"
+                        class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500 mb-2">
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Zonas Manuales</label>
+                    <div id="truckManualZonesSelector" class="flex flex-wrap gap-2"></div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" id="deleteTruckButton" onclick="deleteTruckFromModal()"
+                        class="w-1/3 bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-600 font-bold py-2.5 rounded transition hidden">
+                        <i class="fa-solid fa-trash"></i> Eliminar
+                    </button>
+                    <button type="submit" id="submitTruckButton"
+                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded shadow-lg shadow-indigo-500/30 transition">
+                        Guardar Camión
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL DE ZONAS MANUALES (para la ficha del camión) -->
+    <div id="zonePickerModal"
+        class="fixed inset-0 bg-slate-900/70 hidden flex items-center justify-center z-50 backdrop-blur-sm no-print">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-sm overflow-hidden border-t-4 border-amber-500">
+            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center">
+                <h3 class="font-bold text-slate-800">Seleccionar Zonas</h3>
+                <button onclick="closeZonePickerModal()" class="text-slate-400 hover:text-red-600 transition">
+                    <i class="fa-solid fa-times text-lg"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <input type="hidden" id="zonePickerTruckPlate">
+                <div id="zonePickerButtons" class="flex flex-wrap gap-3 justify-center"></div>
+                <div class="flex gap-3 pt-4 mt-4 border-t">
+                    <button onclick="closeZonePickerModal()"
+                        class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2.5 rounded transition">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ==========================================
         // 1. CONSTANTES, DATOS, PERSISTENCIA Y UTILIDADES
@@ -626,29 +724,192 @@
             }
         }
 
-        async function addTruck() {
-            const plate = prompt("Introduce la matrícula del nuevo camión:");
-            if (!plate) return;
+        // ==========================================
+        // FUNCIONES PARA MODAL DE CAMIÓN
+        // ==========================================
 
-            // Basic validation
-            if (trucks.some(t => t.plate === plate)) {
-                alert("Ya existe un camión con esta matrícula.");
+        function openNewTruckModal() {
+            document.getElementById('editTruckPlate').value = '';
+            document.getElementById('isNewTruck').value = 'true';
+            document.getElementById('truckModalTitle').innerText = 'Nuevo Camión';
+            document.getElementById('deleteTruckButton').classList.add('hidden');
+            document.getElementById('truckForm').reset();
+            document.getElementById('truckPlateInput').disabled = false;
+            renderTruckManualZonesSelector([]);
+            document.getElementById('truckModal').classList.remove('hidden');
+        }
+
+        function openTruckModal(plate) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+
+            document.getElementById('editTruckPlate').value = plate;
+            document.getElementById('isNewTruck').value = 'false';
+            document.getElementById('truckModalTitle').innerText = 'Editar: ' + plate;
+            document.getElementById('deleteTruckButton').classList.remove('hidden');
+
+            document.getElementById('truckPlateInput').value = truck.plate;
+            document.getElementById('truckPlateInput').disabled = true; // No editar matrícula
+            document.getElementById('truckTrailer').value = truck.trailer || '';
+            document.getElementById('truckDriverName').value = truck.driverName || '';
+            document.getElementById('truckDriverAlias').value = truck.driverAlias || '';
+            document.getElementById('truckDriverPhone').value = truck.driverPhone || '';
+            document.getElementById('truckDriverDni').value = truck.driverDni || '';
+            document.getElementById('truckManualLocation').value = truck.manualLocation || '';
+
+            renderTruckManualZonesSelector(truck.manualZones || []);
+            document.getElementById('truckModal').classList.remove('hidden');
+        }
+
+        function closeTruckModal() {
+            document.getElementById('truckModal').classList.add('hidden');
+            document.getElementById('truckForm').reset();
+        }
+
+        function renderTruckManualZonesSelector(selectedZones = []) {
+            const container = document.getElementById('truckManualZonesSelector');
+            container.innerHTML = ZONES.map(z => {
+                const isSelected = selectedZones.includes(z.name);
+                return `
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" 
+                               name="truckManualZone" 
+                               value="${z.name}" 
+                               ${isSelected ? 'checked' : ''}
+                               class="hidden">
+                        <span class="zone-label text-[10px] font-bold py-1 px-2 rounded-full border-2 border-${z.baseColor}-400 transition-all 
+                                     ${isSelected ? `bg-${z.baseColor}-500 text-white` : `bg-white text-${z.baseColor}-700`}"
+                              onclick="this.previousElementSibling.click(); this.classList.toggle('bg-${z.baseColor}-500'); this.classList.toggle('text-white'); this.classList.toggle('bg-white'); this.classList.toggle('text-${z.baseColor}-700');">
+                            ${z.code}
+                        </span>
+                    </label>`;
+            }).join('');
+        }
+
+        async function saveTruckFromModal(event) {
+            event.preventDefault();
+            const isNew = document.getElementById('isNewTruck').value === 'true';
+            const plate = document.getElementById('truckPlateInput').value.toUpperCase().trim();
+
+            if (!plate) {
+                alert('La matrícula es obligatoria');
                 return;
             }
 
-            const newTruck = {
-                plate: plate.toUpperCase(),
-                location: '',
-                zones: [], // Empty by default
-                creationDate: new Date().toISOString().split('T')[0]
-            };
+            if (isNew && trucks.some(t => t.plate === plate)) {
+                alert('Ya existe un camión con esta matrícula.');
+                return;
+            }
+
+            const selectedZones = Array.from(document.querySelectorAll('input[name="truckManualZone"]:checked'))
+                .map(cb => cb.value);
+
+            let truck = trucks.find(t => t.plate === plate);
+            if (!truck) {
+                truck = {
+                    plate: plate,
+                    location: '',
+                    zones: [],
+                    creationDate: new Date().toISOString().split('T')[0]
+                };
+            }
+
+            truck.trailer = document.getElementById('truckTrailer').value.trim();
+            truck.driverName = document.getElementById('truckDriverName').value.trim();
+            truck.driverAlias = document.getElementById('truckDriverAlias').value.trim();
+            truck.driverPhone = document.getElementById('truckDriverPhone').value.trim();
+            truck.driverDni = document.getElementById('truckDriverDni').value.trim();
+            truck.manualLocation = document.getElementById('truckManualLocation').value.trim();
+            truck.manualZones = selectedZones;
 
             try {
-                await api.saveTruck(newTruck);
+                await api.saveTruck(truck);
+                closeTruckModal();
                 await loadData();
             } catch (error) {
                 console.error(error);
-                alert("Error creando camión: " + error.message);
+                alert('Error guardando camión: ' + error.message);
+            }
+        }
+
+        async function deleteTruckFromModal() {
+            const plate = document.getElementById('editTruckPlate').value;
+            if (!plate) return;
+
+            if (!confirm(`¿Eliminar el camión ${plate}? Esta acción es irreversible.`)) return;
+
+            try {
+                await api.deleteTruck(plate);
+                closeTruckModal();
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert('Error eliminando camión: ' + error.message);
+            }
+        }
+
+        // Alias antiguo para mantener compatibilidad
+        function addTruck() {
+            openNewTruckModal();
+        }
+
+        // ==========================================
+        // FUNCIONES PARA MODAL DE ZONAS (desde ficha)
+        // ==========================================
+
+        function openZonePickerModal(plate) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+
+            document.getElementById('zonePickerTruckPlate').value = plate;
+
+            const container = document.getElementById('zonePickerButtons');
+            container.innerHTML = ZONES.map(z => {
+                const isSelected = (truck.manualZones || []).includes(z.name);
+                return `
+                    <button type="button" 
+                            onclick="toggleZoneInPicker('${plate}', '${z.name}', this)"
+                            class="zone-picker-btn px-4 py-2 rounded-lg font-bold text-sm transition-all border-2 border-${z.baseColor}-400
+                                   ${isSelected ? `bg-${z.baseColor}-500 text-white` : `bg-white text-${z.baseColor}-700`}">
+                        ${z.name}
+                    </button>`;
+            }).join('');
+
+            document.getElementById('zonePickerModal').classList.remove('hidden');
+        }
+
+        function closeZonePickerModal() {
+            document.getElementById('zonePickerModal').classList.add('hidden');
+        }
+
+        async function toggleZoneInPicker(plate, zoneName, button) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+
+            if (!truck.manualZones) truck.manualZones = [];
+
+            const hasZone = truck.manualZones.includes(zoneName);
+            if (hasZone) {
+                truck.manualZones = truck.manualZones.filter(z => z !== zoneName);
+            } else {
+                truck.manualZones.push(zoneName);
+            }
+
+            // Toggle visual state
+            const zone = ZONES.find(z => z.name === zoneName);
+            if (zone) {
+                button.classList.toggle(`bg-${zone.baseColor}-500`);
+                button.classList.toggle('text-white');
+                button.classList.toggle('bg-white');
+                button.classList.toggle(`text-${zone.baseColor}-700`);
+            }
+
+            try {
+                await api.saveTruck(truck);
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert('Error guardando zonas: ' + error.message);
             }
         }
 
@@ -1044,29 +1305,53 @@
                 plateDiv.innerHTML = `
                     <div class="flex justify-between items-start">
                         <i class="fa-solid fa-truck ${isOutOfService ? 'text-red-300' : 'text-slate-500'} text-xs"></i>
-                        <button onclick="deleteTruck('${plate}')" class="text-slate-500 hover:text-red-400 transition opacity-0 group-hover:opacity-100 no-print" title="Marcar como Eliminado (a partir de hoy)">
-                            <i class="fa-solid fa-trash-can text-xs"></i>
+                        <button onclick="event.stopPropagation(); openTruckModal('${plate}')" class="text-slate-400 hover:text-white transition opacity-0 group-hover:opacity-100 no-print" title="Editar camión">
+                            <i class="fa-solid fa-pen text-xs"></i>
                         </button>
                     </div>
-                    <div class="font-mono font-bold text-sm tracking-wider text-center mt-1 border-2 border-white/20 rounded px-1 py-0.5 ${isOutOfService ? 'bg-red-800' : `bg-${baseColor}-900`}">${plate}</div>
+                    <div class="font-mono font-bold text-sm tracking-wider text-center mt-1 border-2 border-white/20 rounded px-1 py-0.5 cursor-pointer hover:bg-white/10 transition ${isOutOfService ? 'bg-red-800' : `bg-${baseColor}-900`}"
+                         onclick="openTruckModal('${plate}')"
+                         title="Click para editar">${plate}</div>
                     
                     ${palletSummaryHTML}
 
-                    <div class="flex justify-center gap-1 mt-1 mb-0">
-                        ${ZONES.map(z => createZoneButton(truck.zones, z, truck.plate)).join('')}
+                    <!-- RECUADRO AUTO: Ubicación + Zona automática (fondo blanco) -->
+                    <div class="bg-white/95 text-slate-800 rounded px-2 py-1 mt-1 text-[10px]">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold">${displayLocation || '-'}</span>
+                            <span class="flex gap-0.5">
+                                ${truck.zones.map(z => {
+                    const zone = ZONES.find(zn => zn.name === z);
+                    return zone ? `<span class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>` : '';
+                }).join('')}
+                            </span>
+                        </div>
                     </div>
-                    <div class="text-[9px] text-center mt-1">
-                        <span class="text-slate-300" title="Ubicación calculada por viajes">Auto:</span>
-                        <span class="text-white font-bold">${displayLocation || '-'}</span>
+
+                    <!-- RECUADRO MANUAL: Ubicación + botón zonas -->
+                    <div class="bg-white/20 border border-dashed border-white/40 rounded px-2 py-1 mt-1">
+                        <div class="flex items-center gap-1">
+                            <span class="text-[8px] text-slate-300">📍</span>
+                            <input type="text" 
+                                   placeholder="Manual"
+                                   class="flex-1 bg-transparent text-white text-[10px] border-none outline-none placeholder-slate-400" 
+                                   value="${truck.manualLocation || ''}"
+                                   onchange="updateManualLocation('${plate}', this)"
+                                   ondblclick="event.stopPropagation();">
+                            <button onclick="event.stopPropagation(); openZonePickerModal('${plate}')" 
+                                    class="text-amber-300 hover:text-amber-100 transition no-print" 
+                                    title="Seleccionar zonas manuales">
+                                <i class="fa-solid fa-plus text-[10px]"></i>
+                            </button>
+                        </div>
+                        ${(truck.manualZones && truck.manualZones.length > 0) ? `
+                        <div class="flex gap-0.5 mt-1 justify-center">
+                            ${truck.manualZones.map(z => {
+                    const zone = ZONES.find(zn => zn.name === z);
+                    return zone ? `<span class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>` : '';
+                }).join('')}
+                        </div>` : ''}
                     </div>
-                    <input type="text" 
-                           placeholder="📍 Manual"
-                           class="truck-location-input text-[10px] ${isOutOfService ? 'border-red-500' : ''}" 
-                           value="${truck.manualLocation || ''}"
-                           onchange="updateManualLocation('${plate}', this)"
-                           ondblclick="event.stopPropagation();"
-                           title="Ubicación manual (persiste siempre)"
-                           style="background: rgba(255,255,255,0.15); border: 1px dashed rgba(255,255,255,0.4);">
 
                     <button onclick="toggleOutOfService('${plate}')"
                             class="absolute -bottom-2 -right-2 ${isOutOfService ? 'bg-red-900 hover:bg-red-800' : 'bg-slate-500 hover:bg-slate-600'} text-white text-[9px] font-bold p-1 rounded-full shadow-lg transition transform hover:scale-105"
