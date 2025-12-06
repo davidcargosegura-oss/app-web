@@ -766,6 +766,12 @@
 
             // Update Truck State if new info
             if (calculatedLocation) {
+                // PRIMERO: Si isLocationManual = true Y la fecha aplica, respetar ubicación manual
+                const locationManualApplies = truck.isLocationManual && compareDates(currentDate, truck.locationLastUpdatedDate || '2000-01-01') >= 0;
+                if (locationManualApplies) {
+                    return truck.location;
+                }
+
                 let needsSave = false;
                 let sourceIsManualFallback = false;
 
@@ -773,12 +779,6 @@
                 if (truck.manualLocation && truck.manualLocation.trim() !== '') {
                     const tripIsFresh = (lastCompletedTrip.unloadDate === currentDate);
                     sourceIsManualFallback = !tripIsFresh && (calculatedLocation === truck.manualLocation);
-                }
-
-                // Si isLocationManual = true, el usuario la modificó manualmente.
-                // No actualizar hasta que se asigne un nuevo viaje (drop() resetea isLocationManual = false)
-                if (truck.isLocationManual) {
-                    return truck.location;
                 }
 
                 // Update Location if conditions are met
@@ -1773,11 +1773,15 @@
                 if (plateToRecalculate) {
                     const truckToRestore = trucks.find(t => t.plate === plateToRecalculate);
                     if (truckToRestore && truckToRestore.manualLocation && truckToRestore.manualLocation.trim() !== '') {
+                        // Restaurar ubicación manual
                         truckToRestore.location = truckToRestore.manualLocation;
                         truckToRestore.isLocationManual = true;
+                        truckToRestore.locationLastUpdatedDate = new Date().toISOString().split('T')[0];
                         await api.saveTruck(truckToRestore);
+                    } else {
+                        // Solo limpiar persistencia si NO hay ubicación manual que restaurar
+                        clearTruckPersistence(plateToRecalculate);
                     }
-                    clearTruckPersistence(plateToRecalculate);
                 }
 
                 await loadData(); // Reload to sync
