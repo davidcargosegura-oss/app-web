@@ -615,10 +615,10 @@
             if (truck) {
                 const newLocation = input.value.trim();
 
-                // Si el usuario borra la ubicación, usar manualLocation como fallback
-                if (newLocation === '' && truck.manualLocation) {
-                    truck.location = truck.manualLocation;
-                    truck.isLocationManual = true;
+                if (newLocation === '') {
+                    // Si el usuario borra la ubicación, permitir que el sistema la recalcule
+                    truck.location = '';
+                    truck.isLocationManual = false; // Resetear para que getTruckSuggestedLocation recalcule
                 } else {
                     truck.location = newLocation;
                     // Guardar como nueva ubicación manual base
@@ -631,6 +631,7 @@
                 }
 
                 api.saveTruck(truck); // Autosave
+                loadData(); // Recalcular ubicación si fue borrada
             }
         }
 
@@ -772,15 +773,10 @@
                     sourceIsManualFallback = !tripIsFresh && (calculatedLocation === truck.manualLocation);
                 }
 
-                // NUEVO: Si isLocationManual = true, solo actualizar si el viaje es MÁS RECIENTE que la modificación manual
-                // Esto asegura que viajes antiguos no sobrescriban modificaciones manuales recientes
+                // Si isLocationManual = true, el usuario la modificó manualmente.
+                // No actualizar hasta que se asigne un nuevo viaje (drop() resetea isLocationManual = false)
                 if (truck.isLocationManual) {
-                    // Verificar si el viaje es más reciente que la última modificación manual
-                    if (compareDates(lastCompletedTrip.unloadDate, truck.locationLastUpdatedDate) < 0) {
-                        // El viaje es más antiguo que la modificación manual, no tocarlo
-                        return truck.location;
-                    }
-                    // Si llegamos aquí, el viaje es igual o más reciente, podemos continuar
+                    return truck.location;
                 }
 
                 // Update Location if conditions are met
