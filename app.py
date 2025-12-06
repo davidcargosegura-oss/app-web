@@ -269,14 +269,35 @@ def index():
 @app.route('/api/initial-data')
 @login_required
 def get_initial_data():
-    trucks = [t.to_dict() for t in Truck.query.all()]
-    trips = [t.to_dict() for t in Trip.query.all()]
-    # Return all FDS events (both True and False) to reconstruct history
-    fds_records = [
-        {'plate': r.truck_plate, 'date': r.date, 'is_out_of_service': r.is_out_of_service} 
-        for r in TruckFds.query.all()
-    ]
-    return jsonify({'trucks': trucks, 'trips': trips, 'fds_data': fds_records})
+    try:
+        # print("DEBUG: Invocando get_initial_data")
+        # Ensure schema is up to date if _db_initialized logic failed?
+        # Manually triggering helper check? No, rely on before_request.
+        
+        # Helper to safely serialize
+        def safe_dict(obj, model_name):
+            try:
+                return obj.to_dict()
+            except Exception as e:
+                print(f"ERROR serializing {model_name} ID {getattr(obj, 'id', 'unknown')}: {e}")
+                raise e
+
+        trucks = [safe_dict(t, 'Truck') for t in Truck.query.all()]
+        # print(f"DEBUG: {len(trucks)} camiones cargados.")
+        
+        trips = [safe_dict(t, 'Trip') for t in Trip.query.all()]
+        # print(f"DEBUG: {len(trips)} viajes cargados.")
+        
+        fds_records = [
+            {'plate': r.truck_plate, 'date': r.date, 'is_out_of_service': r.is_out_of_service} 
+            for r in TruckFds.query.all()
+        ]
+        return jsonify({'trucks': trucks, 'trips': trips, 'fds_data': fds_records})
+    except Exception as e:
+        print(f"CRITICAL ERROR in get_initial_data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/trucks', methods=['POST'])
 @login_required
