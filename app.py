@@ -413,6 +413,8 @@ def update_db_schema():
         with app.app_context():
             # Postgres specific: ADD COLUMN IF NOT EXISTS
             db.session.execute(text("ALTER TABLE trip ADD COLUMN IF NOT EXISTS destination_zone VARCHAR(50);"))
+            db.session.execute(text("ALTER TABLE truck ADD COLUMN IF NOT EXISTS manual_location VARCHAR(100) DEFAULT '';"))
+            db.session.execute(text("ALTER TABLE truck ADD COLUMN IF NOT EXISTS is_zone_manual BOOLEAN DEFAULT FALSE;"))
             db.session.commit()
             return "Schema updated successfully. You can now use the app."
     except Exception as e:
