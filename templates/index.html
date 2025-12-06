@@ -1685,7 +1685,7 @@
                         truckToRestore.isLocationManual = true;
                         await api.saveTruck(truckToRestore);
                     }
-                    clearTruckPersistence(plateToRecalculate);
+                    // Eliminado: clearTruckPersistence ya no es necesario aquí
                 }
 
                 await loadData(); // Reload to sync
