@@ -199,13 +199,23 @@ def init_db_on_first_request():
 
             # MIGRATION: Check for new columns
             try:
-                # Check manual_location in truck
-                columns = [c['name'] for c in inspector.get_columns('truck')]
-                if 'manual_location' not in columns:
-                    print("Migrando base de datos: Añadiendo manual_location a truck...")
-                    with db.engine.connect() as conn:
+                # Check Truck columns
+                truck_columns = [c['name'] for c in inspector.get_columns('truck')]
+                with db.engine.connect() as conn:
+                    if 'manual_location' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo manual_location a truck...")
                         conn.execute(text("ALTER TABLE truck ADD COLUMN manual_location VARCHAR(100) DEFAULT ''"))
-                        conn.commit()
+                    if 'is_zone_manual' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo is_zone_manual a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN is_zone_manual BOOLEAN DEFAULT 0"))
+                    
+                    # Check Trip columns
+                    trip_columns = [c['name'] for c in inspector.get_columns('trip')]
+                    if 'destination_zone' not in trip_columns:
+                        print("Migrando base de datos: Añadiendo destination_zone a trip...")
+                        conn.execute(text("ALTER TABLE trip ADD COLUMN destination_zone VARCHAR(50)"))
+                        
+                    conn.commit()
             except Exception as e:
                 print(f"Error checking/migrating schema: {e}")
             
