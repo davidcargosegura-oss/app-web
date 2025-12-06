@@ -61,16 +61,18 @@ class Truck(db.Model):
     is_zone_manual = db.Column(db.Boolean, default=False) # NEW: Independent manual zone control
     zones_str = db.Column(db.String(200), default='')
     manual_location = db.Column(db.String(100), default='') 
+    zones_last_updated = db.Column(db.String(20), default='2000-01-01') # NEW: Track when zones were manually changed
 
     def to_dict(self):
         return {
             'plate': self.plate,
             'location': self.location,
             'locationLastUpdatedDate': self.location_last_updated,
+            'zonesLastUpdatedDate': self.zones_last_updated,  # NEW
             'creationDate': self.creation_date,
             'deletionDate': self.deletion_date,
             'isLocationManual': self.is_location_manual,
-            'isZoneManual': self.is_zone_manual, # NEW
+            'isZoneManual': self.is_zone_manual,
             'zones': self.zones_str.split(',') if self.zones_str else [],
             'manualLocation': self.manual_location 
         }
@@ -208,6 +210,9 @@ def init_db_on_first_request():
                     if 'is_zone_manual' not in truck_columns:
                         print("Migrando base de datos: Añadiendo is_zone_manual a truck...")
                         conn.execute(text("ALTER TABLE truck ADD COLUMN is_zone_manual BOOLEAN DEFAULT 0"))
+                    if 'zones_last_updated' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo zones_last_updated a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN zones_last_updated VARCHAR(20) DEFAULT '2000-01-01'"))
                     
                     # Check Trip columns
                     trip_columns = [c['name'] for c in inspector.get_columns('trip')]
@@ -312,9 +317,10 @@ def save_truck():
     t.creation_date = d.get('creationDate', '2000-01-01')
     t.deletion_date = d.get('deletionDate')
     t.is_location_manual = d.get('isLocationManual', False)
-    t.is_zone_manual = d.get('isZoneManual', False) # NEW
+    t.is_zone_manual = d.get('isZoneManual', False)
     t.zones_str = ','.join(d.get('zones', []))
-    t.manual_location = d.get('manualLocation', '') # NEW
+    t.zones_last_updated = d.get('zonesLastUpdatedDate', '2000-01-01')  # NEW
+    t.manual_location = d.get('manualLocation', '')
     db.session.commit()
     return jsonify(t.to_dict())
 
