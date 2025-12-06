@@ -53,28 +53,41 @@ class Truck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     plate = db.Column(db.String(20), unique=True, nullable=False)
     location = db.Column(db.String(100), default='')
-    # Storing dates as ISO strings (YYYY-MM-DD) to match frontend logic simply
     location_last_updated = db.Column(db.String(20), default='2000-01-01') 
     creation_date = db.Column(db.String(20), nullable=False)
     deletion_date = db.Column(db.String(20), nullable=True)
     is_location_manual = db.Column(db.Boolean, default=False)
-    is_zone_manual = db.Column(db.Boolean, default=False) # NEW: Independent manual zone control
+    is_zone_manual = db.Column(db.Boolean, default=False)
     zones_str = db.Column(db.String(200), default='')
     manual_location = db.Column(db.String(100), default='') 
-    zones_last_updated = db.Column(db.String(20), default='2000-01-01') # NEW: Track when zones were manually changed
+    zones_last_updated = db.Column(db.String(20), default='2000-01-01')
+    # NEW: Additional truck info (optional, not shown on main card)
+    trailer = db.Column(db.String(50), default='')
+    driver_name = db.Column(db.String(100), default='')
+    driver_phone = db.Column(db.String(20), default='')
+    driver_dni = db.Column(db.String(20), default='')
+    driver_alias = db.Column(db.String(50), default='')
+    manual_zones_str = db.Column(db.String(200), default='')  # NEW: Manual zones selected by user
 
     def to_dict(self):
         return {
             'plate': self.plate,
             'location': self.location,
             'locationLastUpdatedDate': self.location_last_updated,
-            'zonesLastUpdatedDate': self.zones_last_updated,  # NEW
+            'zonesLastUpdatedDate': self.zones_last_updated,
             'creationDate': self.creation_date,
             'deletionDate': self.deletion_date,
             'isLocationManual': self.is_location_manual,
             'isZoneManual': self.is_zone_manual,
             'zones': self.zones_str.split(',') if self.zones_str else [],
-            'manualLocation': self.manual_location 
+            'manualLocation': self.manual_location,
+            'manualZones': self.manual_zones_str.split(',') if self.manual_zones_str else [],
+            # NEW: Additional info
+            'trailer': self.trailer,
+            'driverName': self.driver_name,
+            'driverPhone': self.driver_phone,
+            'driverDni': self.driver_dni,
+            'driverAlias': self.driver_alias
         }
 
 class Trip(db.Model):
@@ -213,6 +226,24 @@ def init_db_on_first_request():
                     if 'zones_last_updated' not in truck_columns:
                         print("Migrando base de datos: Añadiendo zones_last_updated a truck...")
                         conn.execute(text("ALTER TABLE truck ADD COLUMN zones_last_updated VARCHAR(20) DEFAULT '2000-01-01'"))
+                    if 'manual_zones_str' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo manual_zones_str a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN manual_zones_str VARCHAR(200) DEFAULT ''"))
+                    if 'trailer' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo trailer a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN trailer VARCHAR(50) DEFAULT ''"))
+                    if 'driver_name' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo driver_name a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN driver_name VARCHAR(100) DEFAULT ''"))
+                    if 'driver_phone' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo driver_phone a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN driver_phone VARCHAR(20) DEFAULT ''"))
+                    if 'driver_dni' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo driver_dni a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN driver_dni VARCHAR(20) DEFAULT ''"))
+                    if 'driver_alias' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo driver_alias a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN driver_alias VARCHAR(50) DEFAULT ''"))
                     
                     # Check Trip columns
                     trip_columns = [c['name'] for c in inspector.get_columns('trip')]
@@ -319,8 +350,15 @@ def save_truck():
     t.is_location_manual = d.get('isLocationManual', False)
     t.is_zone_manual = d.get('isZoneManual', False)
     t.zones_str = ','.join(d.get('zones', []))
-    t.zones_last_updated = d.get('zonesLastUpdatedDate', '2000-01-01')  # NEW
+    t.zones_last_updated = d.get('zonesLastUpdatedDate', '2000-01-01')
     t.manual_location = d.get('manualLocation', '')
+    t.manual_zones_str = ','.join(d.get('manualZones', []))
+    # NEW: Additional truck info
+    t.trailer = d.get('trailer', '')
+    t.driver_name = d.get('driverName', '')
+    t.driver_phone = d.get('driverPhone', '')
+    t.driver_dni = d.get('driverDni', '')
+    t.driver_alias = d.get('driverAlias', '')
     db.session.commit()
     return jsonify(t.to_dict())
 
