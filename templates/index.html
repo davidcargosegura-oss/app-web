@@ -1205,12 +1205,17 @@ ${loadInfo}`;
                                 if (!res.ok) throw new Error(await res.text());
                             },
                             async saveNote(date, type, content) {
-                                const res = await fetch('/api/save-note', {
+                                const res = await fetch('/api/notes', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ date, type, content })
                                 });
                                 if (!res.ok) throw new Error(await res.text());
+                            },
+                            async getNote(date, type) {
+                                const res = await fetch(`/api/notes?date=${date}&type=${type}`);
+                                if (!res.ok) throw new Error(await res.text());
+                                return await res.json();
                             },
                             async saveDriver(driver) {
                                 const response = await fetch('/api/drivers', {
@@ -1239,6 +1244,35 @@ ${loadInfo}`;
                                 if (!response.ok) throw new Error('Error eliminando remolque');
                             }
                         };
+
+                        const saveNoteTimeouts = {};
+                        function saveNotesForSelectedDate(type) {
+                            clearTimeout(saveNoteTimeouts[type]);
+                            saveNoteTimeouts[type] = setTimeout(async () => {
+                                const date = document.getElementById('dateFilter').value;
+                                const el = document.getElementById(`dailyNotes_${type}`);
+                                if (!el) return;
+                                try {
+                                    await api.saveNote(date, type, el.value);
+                                } catch (e) { console.error("Error saving note", type, e); }
+                            }, 800);
+                        }
+
+                        async function loadNotesForSelectedDate() {
+                            const date = document.getElementById('dateFilter').value;
+                            const types = ['Tasks', 'Incidents', 'General'];
+                            for (const type of types) {
+                                try {
+                                    const data = await api.getNote(date, type);
+                                    const el = document.getElementById(`dailyNotes_${type}`);
+                                    if (el) el.value = data.content || '';
+                                } catch (e) {
+                                    console.error("Error loading note", type, e);
+                                    const el = document.getElementById(`dailyNotes_${type}`);
+                                    if (el) el.value = '';
+                                }
+                            }
+                        }
 
                         async function loadData() {
                             try {
