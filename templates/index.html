@@ -1830,46 +1830,30 @@
                                             const safeNotifyTime = trip.notifyTime || '';
                                             // CORRECTED LOGIC BLOCK
                                             notifyControlHTML = '<div class="notify-control no-print">';
-                                                notifyControlHTML += '<input type="time" id="time-' + trip.id + '"
-                                                    value="' + safeNotifyTime + '"
-                                                    onchange="updateNotificationTime(' + trip.id + ')"
-                                                    class="text-xs border border-slate-300 rounded-l mr-[-1px] h-full focus:ring-red-500 outline-none">';
-                                                const titleText = trip.isNotified ? 'Marcar como Pendiente' : 'Marcar
-                                                como Avisado';
+                                                notifyControlHTML += '<input type="time" id="time-' + trip.id + '" ';
+                                            notifyControlHTML += ' value="' + safeNotifyTime + '" ';
+                                            notifyControlHTML += ' onchange="updateNotificationTime(' + trip.id + ')" ';
+                                            notifyControlHTML += ' class="text-xs border border-slate-300 rounded-l mr-[-1px] ' +
+                                                                 'h-full focus:ring-red-500 outline-none">';
+
+                                                const titleText = trip.isNotified ? 'Marcar como Pendiente' :
+                                                'Marcar como Avisado';
                                                 const iconClass = trip.isNotified ? 'check' : 'bell';
-                                                notifyControlHTML += '<button
-                                                    onclick="toggleNotificationStatus(' + trip.id + '); event.stopPropagation();"
-                                                    class="h-full rounded-r transition-colors ' + buttonClasses + ' flex items-center justify-center gap-0.5"
-                                                    title="' + titleText + '">';
-                                                    notifyControlHTML += '<i
-                                                        class="fa-solid fa-' + iconClass + ' text-[8px]"></i>';
-                                                    notifyControlHTML += '<span
-                                                        class="text-[8px] font-bold">AVISO</span>';
+
+                                                notifyControlHTML += '<button onclick="toggleNotificationStatus(' + trip.id + '); ' +
+                                                                 'event.stopPropagation();" ';
+                                            notifyControlHTML += ' class="h-full rounded-r transition-colors ' + buttonClasses + 
+                                                                 ' flex items-center justify-center gap-0.5" ';
+                                            notifyControlHTML += ' title="' + titleText + '">';
+                                                    notifyControlHTML += '<i class="fa-solid fa-' + iconClass + 
+                                                                 ' text-[8px]"></i>';
+                                                    notifyControlHTML += '<span class="text-[8px] font-bold">' +
+                                                        'AVISO</span>';
                                                     notifyControlHTML += '</button></div>';
                                             notifyControlHTML += '<span class="notify-date text-slate-400 font-mono">' +
                                                 formatDate(trip.loadDate) + '</span>';
 
-                                            /* DISABLE BROKEN LOGIC
-                                            notifyControlHTML = '<div class="notify-control no-print">';
-                                                notifyControlHTML += '<input type="time" id="time-' + trip.id + '"
-                                                    value="' + safeNotifyTime + '"
-                                                    onchange="updateNotificationTime(' + trip.id + ')"
-                                                    class="text-xs border border-slate-300 rounded-l mr-[-1px] h-full focus:ring-red-500 outline-none">';
-                                                const titleText = trip.isNotified ? 'Marcar como Pendiente' : 'Marcar
-                                                como Avisado';
-                                                const iconClass = trip.isNotified ? 'check' : 'bell';
-                                                notifyControlHTML += '<button
-                                                    onclick="toggleNotificationStatus(' + trip.id + '); event.stopPropagation();"
-                                                    class="h-full rounded-r transition-colors ' + buttonClasses + ' flex items-center justify-center gap-0.5"
-                                                    title="' + titleText + '">';
-                                                    notifyControlHTML += '<i
-                                                        class="fa-solid fa-' + iconClass + ' text-[8px]"></i>';
-                                                    notifyControlHTML += '<span
-                                                        class="text-[8px] font-bold">AVISO</span>';
-                                                    notifyControlHTML += '</button></div>';
-                                            notifyControlHTML += '<span class="notify-date text-slate-400 font-mono">' +
-                                                formatDate(trip.loadDate) + '</span>';
-                                            */ // END DISABLE BROKEN LOGIC
+
                                             } else {
                                             notifyControlHTML = '<span class="notify-date text-slate-400 font-mono">' +
                                                 formatDate(trip.loadDate) + '</span>';
