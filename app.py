@@ -9,6 +9,7 @@ from flask_admin import Admin, AdminIndexView, expose
 from flask_admin.contrib.sqla import ModelView
 from werkzeug.security import generate_password_hash, check_password_hash
 from wtforms.fields import PasswordField
+import json
 
 # --- 1. CONFIGURACIÓN INICIAL DE LA APLICACIÓN ---
 basedir = os.path.abspath(os.path.dirname(__file__))
