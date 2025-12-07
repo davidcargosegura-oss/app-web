@@ -1902,11 +1902,8 @@
                                                 title="Zona: ${trip.zone}">${ZONE_MAP[trip.zone].code}</span>`
                             : '';
 
-                                            // NEW: Groupage/Full Load Badge (Top Right, adjusted position based on
-                                            assignment)
-                        const loadTypeBadgeRightPos = trip.assignedTruck !== null ? 'right-[115px]'
-                            :
-                            'right-1';
+                        // NEW: Groupage/Full Load Badge (Top Right, adjusted position based on assignment)
+                        const loadTypeBadgeRightPos = trip.assignedTruck !== null ? 'right-[115px]' : 'right-1';
 
                         // Generate Copy Button HTML
                         const copyButtonHTML = `
@@ -2153,10 +2150,9 @@
                                 pg, ep, pp
                             };
 
-                                            // Preserve assigned truck/slot if editing, though usually modal is for
-                                            generic editing.
-                                // If it's a new trip, they are null by default in backend or we send null.
-                                if(id) {
+                            // Preserve assigned truck/slot if editing, though usually modal is for generic editing.
+                            // If it's a new trip, they are null by default in backend or we send null.
+                            if (id) {
                                 const existingTrip = trips.find(t => t.id === id);
                                 if (existingTrip) {
                                     tripData.assignedTruck = existingTrip.assignedTruck;
@@ -2449,8 +2445,7 @@
                             }
 
                             // =========================================================================
-                            // LÓGICA DE EXCLUSIVIDAD DE CARGA COMPLETA (COMP) Y STACKING DE GRUPAJE
-                            (GRU)
+                            // LÓGICA DE EXCLUSIVIDAD DE CARGA COMPLETA (COMP) Y STACKING DE GRUPAJE (GRU)
                             // =========================================================================
 
                             const assignedTripsInSlot = trips.filter(t =>
@@ -2482,9 +2477,8 @@
                                             Completa.`);
                                     return;
                                 }
-                                // Si el slot está vacío o solo contiene otros Grupajes, la asignación es
-                                permitida.
-                                            }
+                                // Si el slot está vacío o solo contiene otros Grupajes, la asignación es permitida.
+                            }
                             // =========================================================================
 
                             // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la persistencia del camión anterior.
@@ -2536,13 +2530,9 @@
                                 const deletionDate = truck.deletionDate || '';
                                 const truckZones = truck.zones ? truck.zones.join('|') : '';
 
-                                for (let i = 0; i < 4; i++) { // MODIFIED: Get ALL trips for the slot const
-                                    assignedTrips = trips.filter(t => t.assignedTruck === plate &&
-                                        t.assignedSlot === i
-                                        && t.loadDate === dateFilter);
-                                    const slotType = i % 2 === 0 ? `SALIDA ${Math.floor(i / 2) + 1}` :
-                                        `RETORNO
-                                                ${Math.floor(i / 2) + 1}`;
+                                for (let i = 0; i < 4; i++) { // MODIFIED: Get ALL trips for the slot
+                                    const assignedTrips = trips.filter(t => t.assignedTruck === plate && t.assignedSlot === i && t.loadDate === dateFilter);
+                                    const slotType = i % 2 === 0 ? `SALIDA ${Math.floor(i / 2) + 1}` : `RETORNO ${Math.floor(i / 2) + 1}`;
 
                                     if (assignedTrips.length > 0) {
                                         assignedTrips.forEach(trip => {
@@ -2553,12 +2543,7 @@
                                             const tripZone = trip.zone || '';
                                             const tripCR = getTripCR(trip);
                                             // MODIFIED ROW
-                                            csv += `"${plate}","${location}","${slotType}","${trip.type ===
-                                                'departure' ?
-                                                'SALIDA' :
-                                                'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg
-                                                || 0}","${trip.ep || 0}","${trip.pp ||
-                                                0}","${tripCR}","${notifyTime}","${isNotifiedText}","${isOutOfService}","${truckZones}","${tripZone}","${creationDate}","${deletionDate}"\n`;
+                                            csv += `"${plate}","${location}","${slotType}","${trip.type === 'departure' ? 'SALIDA' : 'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg || 0}","${trip.ep || 0}","${trip.pp || 0}","${tripCR}","${notifyTime}","${isNotifiedText}","${isOutOfService}","${truckZones}","${tripZone}","${creationDate}","${deletionDate}"\n`;
                                         });
                                     } else {
                                         csv +=
@@ -2589,10 +2574,7 @@
                                 const tripZone = trip.zone || '';
                                 const tripCR = getTripCR(trip);
                                 // MODIFIED ROW
-                                csv += `SIN ASIGNAR,-,"-","${trip.type === 'departure' ? 'SALIDA' :
-                                    'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg
-                                    || 0}","${trip.ep || 0}","${trip.pp ||
-                                    0}","${tripCR}",-,"NO","NO",-,"${tripZone}",-,"-"\n`;
+                                csv += `SIN ASIGNAR,-,"-","${trip.type === 'departure' ? 'SALIDA' : 'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg || 0}","${trip.ep || 0}","${trip.pp || 0}","${tripCR}",-,"NO","NO",-,"${tripZone}",-,"-"\n`;
                             });
 
                             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
