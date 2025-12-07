@@ -1829,7 +1829,7 @@
 
                                             notifyControlHTML = `
                                             <div class="notify-control no-print">
-                                                <input type="time" id="time-${trip.id}" value="${trip.notifyTime}"
+                                                <input type="time" id="time-${trip.id}" value="${trip.notifyTime || ''}"
                                                     onchange="updateNotificationTime(${trip.id})"
                                                     class="text-xs border border-slate-300 rounded-l mr-[-1px] h-full focus:ring-red-500 outline-none">
                                                 <button
