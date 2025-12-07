@@ -68,28 +68,57 @@ class Truck(db.Model):
     driver_dni = db.Column(db.String(20), default='')
     driver_alias = db.Column(db.String(50), default='')
     manual_zones_str = db.Column(db.String(200), default='')  # NEW: Manual zones selected by user
+    history_str = db.Column(db.Text, default='[]') # NEW: JSON string for history [{date, trailer, driver_name...}]
 
     def to_dict(self):
         return {
+            'id': self.id,
             'plate': self.plate,
             'location': self.location,
             'locationLastUpdatedDate': self.location_last_updated,
-            'zonesLastUpdatedDate': self.zones_last_updated,
             'creationDate': self.creation_date,
             'deletionDate': self.deletion_date,
             'isLocationManual': self.is_location_manual,
             'isZoneManual': self.is_zone_manual,
             'zones': self.zones_str.split(',') if self.zones_str else [],
+            'zonesLastUpdatedDate': self.zones_last_updated,
             'manualLocation': self.manual_location,
             'manualZones': self.manual_zones_str.split(',') if self.manual_zones_str else [],
-            # NEW: Additional info
             'trailer': self.trailer,
             'driverName': self.driver_name,
             'driverPhone': self.driver_phone,
             'driverDni': self.driver_dni,
-            'driverAlias': self.driver_alias
+            'driverAlias': self.driver_alias,
+            'history': json.loads(self.history_str) if self.history_str else []
         }
 
+class Driver(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    dni = db.Column(db.String(20), default='')
+    phone = db.Column(db.String(20), default='')
+    alias = db.Column(db.String(50), default='')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'dni': self.dni,
+            'phone': self.phone,
+            'alias': self.alias
+        }
+
+class Trailer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    plate = db.Column(db.String(20), unique=True, nullable=False)
+    type = db.Column(db.String(50), default='')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'plate': self.plate,
+            'type': self.type
+        }
 class Trip(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     type = db.Column(db.String(20), nullable=False) # 'departure', 'return'
@@ -194,6 +223,8 @@ admin.add_view(ProtectedAdminView(User, db.session, name='Usuarios'))
 admin.add_view(ProtectedAdminView(Truck, db.session, name='Camiones'))
 admin.add_view(ProtectedAdminView(Trip, db.session, name='Viajes'))
 admin.add_view(ProtectedAdminView(DailyNote, db.session, name='Notas'))
+admin.add_view(ProtectedAdminView(Driver, db.session, name='Conductores')) # Add Driver to Admin
+admin.add_view(ProtectedAdminView(Trailer, db.session, name='Remolques')) # Add Trailer to Admin
 
 # --- 4. INIT & RUTAS BASIVAS ---
 # --- 4. INIT & RUTAS BASIVAS ---
@@ -210,13 +241,13 @@ def init_db_on_first_request():
             tables = inspector.get_table_names()
             print(f"Tablas existentes antes de check: {tables}")
             
-            db.create_all()
+            db.create_all() # This will create Driver and Trailer tables if they don't exist
 
             # MIGRATION: Check for new columns
             try:
-                # Check Truck columns
-                truck_columns = [c['name'] for c in inspector.get_columns('truck')]
                 with db.engine.connect() as conn:
+                    # Check Truck columns
+                    truck_columns = [c['name'] for c in inspector.get_columns('truck')]
                     if 'manual_location' not in truck_columns:
                         print("Migrando base de datos: Añadiendo manual_location a truck...")
                         conn.execute(text("ALTER TABLE truck ADD COLUMN manual_location VARCHAR(100) DEFAULT ''"))
@@ -244,6 +275,9 @@ def init_db_on_first_request():
                     if 'driver_alias' not in truck_columns:
                         print("Migrando base de datos: Añadiendo driver_alias a truck...")
                         conn.execute(text("ALTER TABLE truck ADD COLUMN driver_alias VARCHAR(50) DEFAULT ''"))
+                    if 'history_str' not in truck_columns:
+                        print("Migrando base de datos: Añadiendo history_str a truck...")
+                        conn.execute(text("ALTER TABLE truck ADD COLUMN history_str TEXT DEFAULT '[]'"))
                     
                     # Check Trip columns
                     trip_columns = [c['name'] for c in inspector.get_columns('trip')]
@@ -323,12 +357,15 @@ def get_initial_data():
         
         trips = [safe_dict(t, 'Trip') for t in Trip.query.all()]
         # print(f"DEBUG: {len(trips)} viajes cargados.")
+
+        drivers = [safe_dict(d, 'Driver') for d in Driver.query.all()]
+        trailers = [safe_dict(t, 'Trailer') for t in Trailer.query.all()]
         
         fds_records = [
             {'plate': r.truck_plate, 'date': r.date, 'is_out_of_service': r.is_out_of_service} 
             for r in TruckFds.query.all()
         ]
-        return jsonify({'trucks': trucks, 'trips': trips, 'fds_data': fds_records})
+        return jsonify({'trucks': trucks, 'trips': trips, 'fds_data': fds_records, 'drivers': drivers, 'trailers': trailers})
     except Exception as e:
         print(f"CRITICAL ERROR in get_initial_data: {e}")
         import traceback
@@ -359,6 +396,39 @@ def save_truck():
     t.driver_phone = d.get('driverPhone', '')
     t.driver_dni = d.get('driverDni', '')
     t.driver_alias = d.get('driverAlias', '')
+    
+    # NEW: History Logic
+    # We expect 'effectiveDate' in the request if this is a temporal update.
+    # If not provided, we assume it's an update to the "current" state (which we still mirror in main cols).
+    effective_date = d.get('effectiveDate')
+    if effective_date:
+        import json
+        try:
+            history = json.loads(t.history_str or '[]')
+        except:
+            history = []
+            
+        # Create new history entry
+        new_entry = {
+            'date': effective_date,
+            'trailer': t.trailer,
+            'driverName': t.driver_name,
+            'driverPhone': t.driver_phone,
+            'driverDni': t.driver_dni,
+            'driverAlias': t.driver_alias,
+            'manualLocation': t.manual_location,
+            'manualZones': t.manual_zones_str.split(',') if t.manual_zones_str else []
+        }
+        
+        # Remove existing entry for this date if any
+        history = [h for h in history if h.get('date') != effective_date]
+        history.append(new_entry)
+        
+        # Sort by date
+        history.sort(key=lambda x: x.get('date'))
+        
+        t.history_str = json.dumps(history)
+
     db.session.commit()
     return jsonify(t.to_dict())
 
