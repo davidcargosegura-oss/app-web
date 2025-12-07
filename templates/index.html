@@ -683,7 +683,7 @@
                             Date().toISOString().split('T')[0]; return compareDates(dateStr, today) < 0;
                     } function
                         isTruckActiveForDate(truck, date) {
-                            if (compareDates(truck.creationDate, date) > 0) return false;
+                        if (compareDates(truck.creationDate, date) > 0) return false;
                         if (truck.deletionDate && compareDates(truck.deletionDate, date) <= 0) return false; return true;
                     }
                     function getTruckDataForDate(truck, date) {
@@ -708,8 +708,8 @@
                             } return resolved;
                     } function
                         copyTruckData(plate) {
-                            const dateFilter = document.getElementById('dateFilter').value; const
-                                truck = trucks.find(t => t.plate === plate);
+                        const dateFilter = document.getElementById('dateFilter').value; const
+                            truck = trucks.find(t => t.plate === plate);
                         if (!truck) return;
 
                         const data = getTruckDataForDate(truck, dateFilter);
@@ -1329,7 +1329,7 @@
                         latestEvent ? latestEvent.is_out_of_service : false;
                     } async function
                         toggleOutOfService(plate) {
-                            const
+                        const
                             dateFilter = document.getElementById('dateFilter').value; const
                                 truck = trucks.find(t => t.plate === plate);
                         if (!truck) return;
@@ -1610,21 +1610,17 @@
                                         slotDiv.appendChild(tripCard);
                                     });
 
-                                            // Append Copy Button for the Slot (ONLY for Groupage Stacks)
-                                            // User Request: "en los grupajes cola el boton... esquina inferior
-                                            izquierda"
-                                            // For Full Load (isSingleFullLoad), we REMOVE this button as it's now
-                                            inside the card.
-                                        if(!isSingleFullLoad) {
+                                    // Append Copy Button for the Slot (ONLY for Groupage Stacks)
+                                    // User Request: "en los grupajes cola el boton... esquina inferior izquierda"
+                                    // For Full Load (isSingleFullLoad), we REMOVE this button as it's now inside the card.
+                                    if (!isSingleFullLoad) {
                                         const copyBtn = document.createElement('button');
                                         copyBtn.id = `btn-copy-slot-${plate}-${i}`;
                                         copyBtn.onclick = (e) => {
                                             e.stopPropagation(); copyAssignedSlot(plate, i);
                                         };
                                         // Changed position to bottom-1 left-1
-                                        copyBtn.className = "absolute bottom-1 left-1 z-20 text-slate-400
-                                        bg - white / 80 hover: bg - white hover: text - indigo - 600 rounded px - 1 shadow border
-                                        border - slate - 200 text - xs no - print transition";
+                                        copyBtn.className = "absolute bottom-1 left-1 z-20 text-slate-400 bg-white/80 hover:bg-white hover:text-indigo-600 rounded px-1 shadow border border-slate-200 text-xs no-print transition";
                                         copyBtn.title = "Copiar todos los viajes del hueco";
                                         copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i>';
                                         slotDiv.appendChild(copyBtn);
@@ -1782,9 +1778,8 @@
                         const totalReturnPP = returnTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
                         // END NEW UNASSIGNED PALLET CALCULATION
 
-                        renderList(unassignedDepartureZone, departureTrips, 'Sin salidas
-                                            pendientes.');
-                                            renderList(unassignedReturnZone, returnTrips, 'Sin retornos pendientes.');
+                        renderList(unassignedDepartureZone, departureTrips, 'Sin salidas pendientes.');
+                        renderList(unassignedReturnZone, returnTrips, 'Sin retornos pendientes.');
 
                         // NEW: Update counters to include CR and Pallet Counts
                         document.getElementById('count-departure').innerHTML =
@@ -1929,12 +1924,11 @@
                                                 title="Viaje de Grupaje">GRU${copyButtonHTML}</span>`
                             : `<span
                                                 class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-slate-600 bg-slate-200 text-[8px] font-bold flex items-center"
-                                                title="Viaje de Carga Completa">COMP${copyButtonHTML.replace('text-white/80
-                                                hover: text - white', 'text - slate - 500 hover: text - indigo - 600')}</span>`;
+                                                title="Viaje de Carga Completa">COMP${copyButtonHTML.replace('text-white/80 hover:text-white', 'text-slate-500 hover:text-indigo-600')}</span>`;
 
-                                            // Pallet Info Container (PG, EP, PP, CR) - No absolute positioning, added
-                                            highlighting
-                                            const tripCR = getTripCR(trip);
+                        // Pallet Info Container (PG, EP, PP, CR) - No absolute positioning, added
+                        highlighting
+                        const tripCR = getTripCR(trip);
                         let palletInfoHTML = '';
                         if (trip.isGroupage) {
                             palletInfoHTML = `
@@ -1956,9 +1950,7 @@
                             : '';
 
                         // Adjust client padding to account for zone badge
-                        const clientInfoClasses = trip.assignedTruck !== null ? 'pr-[110px]
-                                            pl - [25px]' :
-                        'pr-1.5 pl-[25px]';
+                        const clientInfoClasses = trip.assignedTruck !== null ? 'pr-[110px] pl-[25px]' : 'pr-1.5 pl-[25px]';
 
                         div.innerHTML = `
                                             ${zoneBadgeHTML}
@@ -2007,14 +1999,13 @@
                             const isChecked = z.name === selectedZone ? 'checked' : '';
                             const baseColor = z.baseColor;
 
-                            // MODIFICADO: Clases de selección más visibles (outline-offset-2,
-                            outline -* -800, bg -* -700)
-                        const selectedClasses = isChecked
-                            ? `bg-${baseColor}-700 outline outline-4 outline-offset-2
+                            // MODIFICADO: Clases de selección más visibles (outline-offset-2, outline-*-800, bg-*-700)
+                            const selectedClasses = isChecked
+                                ? `bg-${baseColor}-700 outline outline-4 outline-offset-2
                                             outline-${baseColor}-800`
-                            : '';
+                                : '';
 
-                        return `
+                            return `
                                             <label class="flex items-center cursor-pointer">
                                                 <input type="radio" name="tripZone" value="${z.name}" ${isChecked}
                                                     class="hidden">
@@ -2026,33 +2017,33 @@
                                                 </span>
                                             </label>
                                             `;
-                    }).join('');
+                        }).join('');
 
-                    selector.querySelectorAll('input[name="tripZone"]').forEach(input => {
-                        const zoneLabel = input.nextElementSibling;
-                        const baseColor = ZONE_MAP[input.value].baseColor;
+                        selector.querySelectorAll('input[name="tripZone"]').forEach(input => {
+                            const zoneLabel = input.nextElementSibling;
+                            const baseColor = ZONE_MAP[input.value].baseColor;
 
-                        input.addEventListener('change', () => {
-                            // 1. Resetear todas las etiquetas
-                            selector.querySelectorAll('input[name="tripZone"]').forEach(innerInput => {
-                                const innerLabel = innerInput.nextElementSibling;
-                                const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
+                            input.addEventListener('change', () => {
+                                // 1. Resetear todas las etiquetas
+                                selector.querySelectorAll('input[name="tripZone"]').forEach(innerInput => {
+                                    const innerLabel = innerInput.nextElementSibling;
+                                    const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
 
-                                // Quitar las clases de selección fuerte (MODIFICADO)
-                                innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`,
-                                    `outline-offset-2`, `outline-${innerBaseColor}-800`);
-                                // Volver al estado normal
-                                innerLabel.classList.add(`bg-${innerBaseColor}-500`);
+                                    // Quitar las clases de selección fuerte (MODIFICADO)
+                                    innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`,
+                                        `outline-offset-2`, `outline-${innerBaseColor}-800`);
+                                    // Volver al estado normal
+                                    innerLabel.classList.add(`bg-${innerBaseColor}-500`);
+                                });
+
+                                // 2. Aplicar clases a la etiqueta seleccionada (MODIFICADO)
+                                zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`,
+                                    `outline-offset-2`,
+                                    `outline-${baseColor}-800`);
+                                zoneLabel.classList.remove(`bg-${baseColor}-500`);
                             });
-
-                            // 2. Aplicar clases a la etiqueta seleccionada (MODIFICADO)
-                            zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`,
-                                `outline-offset-2`,
-                                `outline-${baseColor}-800`);
-                            zoneLabel.classList.remove(`bg-${baseColor}-500`);
                         });
-                    });
-                                            }
+                    }
 
                     /**
                     * Muestra u oculta los campos de palets según la casilla "Grupaje".
@@ -2225,8 +2216,7 @@
                                 e.target.classList.remove('drag-over');
                         });
 
-                        // NEW: Render Destination Zone Selector (Clone needed for different
-                        ID / Name)
+                        // NEW: Render Destination Zone Selector (Clone needed for different ID / Name)
                         function renderTripDestinationZoneSelector(selectedZone = null) {
                             const selector = document.getElementById('tripDestinationZoneSelector');
                             if (!selector) return;
@@ -2467,9 +2457,8 @@
                                 t.assignedTruck === plate &&
                                 t.assignedSlot === slotIndex &&
                                 t.loadDate === dateFilter &&
-                                t.id !== tripId // Excluye el viaje que se está moviendo (si ya estaba en
-                                            este slot)
-                                            );
+                                t.id !== tripId // Excluye el viaje que se está moviendo (si ya estaba en este slot)
+                            );
 
                             const isSlotOccupied = assignedTripsInSlot.length > 0;
                             const isSlotOccupiedByFullLoad = assignedTripsInSlot.some(t => t.isGroupage
@@ -2496,21 +2485,19 @@
                                 // Si el slot está vacío o solo contiene otros Grupajes, la asignación es
                                 permitida.
                                             }
-                                            // =========================================================================
+                            // =========================================================================
 
-                                            // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la
-                                            persistencia del camión anterior.
-                                if(trip.assignedTruck && trip.assignedTruck !== plate) {
+                            // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la persistencia del camión anterior.
+                            if (trip.assignedTruck && trip.assignedTruck !== plate) {
                                 await clearTruckPersistence(trip.assignedTruck); // Await for Persistence
-                                clear
+
                             }
 
                             trip.assignedTruck = plate;
                             trip.assignedSlot = slotIndex;
 
-                                            // NEW: If we assign a trip, we allow the location to be auto-updated.
-                                            // This overrides any previous manual setting (but manual setting is saved
-                                            in manualLocation).
+                            // NEW: If we assign a trip, we allow the location to be auto-updated.
+                            // This overrides any previous manual setting (but manual setting is saved in manualLocation).
                             const assignedTruckObj = trucks.find(t => t.plate === plate);
                             if (assignedTruckObj) {
                                 assignedTruckObj.isLocationManual = false;
@@ -2519,20 +2506,15 @@
                                 await api.saveTruck(assignedTruckObj);
                             }
 
-                            // Forzar recálculo de ubicación para el camión de destino para el día
-                            siguiente.
-                                clearTruckPersistence(plate);
+                            // Forzar recálculo de ubicación para el camión de destino para el día siguiente.
+                            clearTruckPersistence(plate);
 
                             await api.saveTrip(trip); // SAVE API
                             await loadData();
                         }
 
                         function exportToCSV() {
-                            let csv =
-                                'Matrícula,Ubicación,Slot,Tipo,Cliente,Conductor,Origen,Destino,Fecha
-                            Carga, Fecha Descarga, Urgente, Grupaje, PG, EP, PP, CR, Hora Aviso, Avisado,
-                                Fuera de Servicio, Zonas Camión, Zona Viaje, Fecha Creación, Fecha
-                            Eliminación\\n'; // MODIFIED HEADER
+                            let csv = 'Matrícula,Ubicación,Slot,Tipo,Cliente,Conductor,Origen,Destino,Fecha Carga,Fecha Descarga,Urgente,Grupaje,PG,EP,PP,CR,Hora Aviso,Avisado,Fuera de Servicio,Zonas Camión,Zona Viaje,Fecha Creación,Fecha Eliminación\\n'; // MODIFIED HEADER
                             const dateFilter = document.getElementById('dateFilter').value;
                             const selectedZoneFilter = document.getElementById('zoneFilter').value;
 
