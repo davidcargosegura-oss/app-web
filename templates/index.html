@@ -1830,7 +1830,7 @@
                                             const safeNotifyTime = trip.notifyTime || '';
                                             notifyControlHTML = `
                                             <div class="notify-control no-print">
-                                                <input type="time" id="time-${trip.id}" value="${safeNotifyTime}"
+                                                <input type="time" id="time-${trip.id}" value="` + safeNotifyTime + `"
                                                     onchange="updateNotificationTime(${trip.id})"
                                                     class="text-xs border border-slate-300 rounded-l mr-[-1px] h-full focus:ring-red-500 outline-none">
                                                 <button
