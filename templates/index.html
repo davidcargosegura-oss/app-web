@@ -1835,11 +1835,9 @@
                                             notifyControlHTML += ' onchange="updateNotificationTime(' + trip.id + ')" ';
                                             notifyControlHTML += '
                                                     class="text-xs border border-slate-300 rounded-l mr-[-1px] h-full focus:ring-red-500 outline-none">';
-
                                                 const titleText = trip.isNotified ? 'Marcar como Pendiente' : 'Marcar
                                                 como Avisado';
                                                 const iconClass = trip.isNotified ? 'check' : 'bell';
-
                                                 notifyControlHTML += '<button
                                                     onclick="toggleNotificationStatus(' + trip.id + '); event.stopPropagation();" ';
                                             notifyControlHTML += '
