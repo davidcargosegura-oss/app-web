@@ -826,10 +826,10 @@
             const data = getTruckDataForDate(truck, dateFilter);
 
             const text = `Camión / Remolque: ${plate} / ${data.trailer || ''}
-                        Conductor: ${data.driverName || ''}
-                        DNI: ${data.driverDni || ''}
-                        Teléfono: ${data.driverPhone || ''}
-                        Alias: ${data.driverAlias || ''}`;
+Conductor: ${data.driverName || ''}
+DNI: ${data.driverDni || ''}
+Teléfono: ${data.driverPhone || ''}
+Alias: ${data.driverAlias || ''}`;
 
             navigator.clipboard.writeText(text).then(() => {
                 const btn = document.getElementById(`btn-copy-${plate}`);
@@ -875,12 +875,31 @@
                 }
 
                 return `${t.client || '-'}
-                        ${formatDate(t.loadDate)} / ${t.origin || '-'}
-                        ${formatDate(t.unloadDate)} / ${t.destination || '-'}
-                        ${loadInfo}`;
+${formatDate(t.loadDate)} / ${t.origin || '-'}
+${formatDate(t.unloadDate)} / ${t.destination || '-'}
+${loadInfo}`;
             });
 
-            const text = parts.join('\n\n---------------\n\n');
+            // Calculate totals
+            let totalPG = 0, totalEP = 0, totalPP = 0;
+            slotTrips.forEach(t => {
+                if (t.isGroupage) {
+                    totalPG += t.pg || 0;
+                    totalEP += t.ep || 0;
+                    totalPP += t.pp || 0;
+                }
+            });
+
+            let text = parts.join('\n---------------\n');
+
+            // Add total line if there are groupage trips
+            if (totalPG > 0 || totalEP > 0 || totalPP > 0) {
+                const totalParts = [];
+                if (totalPG > 0) totalParts.push(`${totalPG}PG`);
+                if (totalEP > 0) totalParts.push(`${totalEP}EP`);
+                if (totalPP > 0) totalParts.push(`${totalPP}PP`);
+                text += `\n---------------\nTotal: ${totalParts.join(' + ')}`;
+            }
 
             navigator.clipboard.writeText(text).then(() => {
                 const btn = document.getElementById(`btn-copy-slot-${plate}-${slotIndex}`);
