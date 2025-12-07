@@ -220,6 +220,11 @@ class MyAdminIndexView(AdminIndexView):
         return redirect(url_for('index'))
 
 admin = Admin(app, name='Gestor Tráfico', index_view=MyAdminIndexView(name='Dashboard', url='/admin'))
+
+# Add link back to traffic manager
+from flask_admin.menu import MenuLink
+admin.add_link(MenuLink(name='← Gestor de Tráfico', url='/'))
+
 admin.add_view(ProtectedAdminView(User, db.session, name='Usuarios'))
 admin.add_view(ProtectedAdminView(Truck, db.session, name='Camiones'))
 admin.add_view(ProtectedAdminView(Trip, db.session, name='Viajes'))
