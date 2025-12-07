@@ -932,9 +932,9 @@ ${loadInfo}`;
             }
 
             const text = `${trip.client || '-'}
-                        ${formatDate(trip.loadDate)} / ${trip.origin || '-'}
-                        ${formatDate(trip.unloadDate)} / ${trip.destination || '-'}
-                        ${loadInfo}`;
+${formatDate(trip.loadDate)} / ${trip.origin || '-'}
+${formatDate(trip.unloadDate)} / ${trip.destination || '-'}
+${loadInfo}`;
 
             navigator.clipboard.writeText(text).then(() => {
                 const btn = document.getElementById(`btn-copy-trip-${tripId}`);
