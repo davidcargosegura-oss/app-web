@@ -2011,19 +2011,6 @@
                                             const isGroupage = document.getElementById('isGroupage').checked;
                                             const palletContainer = document.getElementById('palletInputsContainer');
 
-                                            if (palletContainer) {
-                                            if (isGroupage) {
-                                            palletContainer.classList.remove('hidden');
-                                            } else {
-                                            palletContainer.classList.add('hidden');
-                                            // Limpiar los valores al ocultar, para evitar guardar datos erróneos en un
-                                            completo.
-                                            document.getElementById('pg').value = 0;
-                                            document.getElementById('ep').value = 0;
-                                            document.getElementById('pp').value = 0;
-                                            }
-                                            }
-                                            }
 
 
                                             function openModal() {
@@ -2069,11 +2056,10 @@
                                             document.getElementById('loadDate').value = trip.loadDate;
                                             document.getElementById('unloadDate').value = trip.unloadDate;
                                             document.getElementById('isUrgent').checked = trip.isUrgent;
-                                            document.getElementById('isGroupage').checked = trip.isGroupage || false; //
-                                            NEW: Populate isGroupage
+                                            document.getElementById('isGroupage').checked = trip.isGroupage || false;
+                                            // NEW: Populate isGroupage
                                             document.querySelector(`input[name="tripType"][value="${trip.type}"]`).checked
-                                            =
-                                            true;
+                                            = true;
 
                                             // NEW: Populate pallet fields
                                             document.getElementById('pg').value = trip.pg || 0;
@@ -2489,9 +2475,9 @@
 
                                             function exportToCSV() {
                                             let csv =
-                                            'Matrícula,Ubicación,Slot,Tipo,Cliente,Conductor,Origen,Destino,Fecha Carga,
-                                            Fecha Descarga, Urgente, Grupaje, PG, EP, PP, CR, Hora Aviso, Avisado, Fuera
-                                            de Servicio, Zonas Camión, Zona Viaje, Fecha Creación, Fecha
+                                            'Matrícula,Ubicación,Slot,Tipo,Cliente,Conductor,Origen,Destino,Fecha
+                                            Carga,Fecha Descarga, Urgente, Grupaje, PG, EP, PP, CR, Hora Aviso, Avisado,
+                                            Fuera de Servicio, Zonas Camión, Zona Viaje, Fecha Creación, Fecha
                                             Eliminación\\n'; // MODIFIED HEADER
                                             const dateFilter = document.getElementById('dateFilter').value;
                                             const selectedZoneFilter = document.getElementById('zoneFilter').value;
