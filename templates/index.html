@@ -2054,8 +2054,7 @@ ${loadInfo}`;
                                                 class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-slate-600 bg-slate-200 text-[8px] font-bold flex items-center"
                                                 title="Viaje de Carga Completa">COMP${copyButtonHTML.replace('text-white/80 hover:text-white', 'text-slate-500 hover:text-indigo-600')}</span>`;
 
-            // Pallet Info Container (PG, EP, PP, CR) - No absolute positioning, added
-            highlighting
+            // Pallet Info Container (PG, EP, PP, CR) - No absolute positioning, added highlighting
             const tripCR = getTripCR(trip);
             let palletInfoHTML = '';
             if (trip.isGroupage) {
@@ -2306,6 +2305,20 @@ ${loadInfo}`;
             } catch (err) {
                 console.error(err);
                 alert("Error al guardar viaje: " + err.message);
+            }
+        }
+
+        async function unassignAllTrips() {
+            const dateFilter = document.getElementById('dateFilter').value;
+            if (!confirm(`¿Desasignar TODOS los viajes del día ${formatDate(dateFilter)}? Esta acción moverá todos los viajes asignados a la sección de Pendientes.`)) {
+                return;
+            }
+            try {
+                await api.unassignDay(dateFilter);
+                await loadData();
+            } catch (e) {
+                console.error(e);
+                alert('Error al desasignar viajes: ' + e.message);
             }
         }
 
