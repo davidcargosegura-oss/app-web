@@ -835,6 +835,45 @@ ${loadInfo}`;
             });
         }
 
+        // NEW: Helper to copy individual trip data
+        function copyTripToClipboard(tripId) {
+            const trip = trips.find(t => t.id === tripId);
+            if (!trip) return;
+
+            const pg = trip.pg || 0;
+            const ep = trip.ep || 0;
+            const pp = trip.pp || 0;
+
+            let loadInfo = "Completo";
+            if (trip.isGroupage) {
+                const pallets = [];
+                if (pg > 0) pallets.push(`${pg}PG`);
+                if (ep > 0) pallets.push(`${ep}EP`);
+                if (pp > 0) pallets.push(`${pp}PP`);
+                loadInfo = pallets.join(' + ') || '0 Palets';
+            }
+
+            const text = `${trip.client || '-'}
+${formatDate(trip.loadDate)} / ${trip.origin || '-'}
+${formatDate(trip.unloadDate)} / ${trip.destination || '-'}
+${loadInfo}`;
+
+            navigator.clipboard.writeText(text).then(() => {
+                // Visual feedback on the specific button
+                const btn = document.getElementById(`btn-copy-trip-${tripId}`);
+                if (btn) {
+                    // Store original icon class to restore it
+                    const icon = btn.querySelector('i');
+                    const originalClass = icon.className;
+                    icon.className = 'fa-solid fa-check text-green-500';
+                    setTimeout(() => icon.className = originalClass, 1000);
+                }
+            }).catch(err => {
+                console.error(err);
+                alert('No se pudo copiar al portapapeles');
+            });
+        }
+
         // --- TRUCK HELPERS (RESTORED) ---
 
         async function clearTruckPersistence(plate) {
@@ -1588,14 +1627,19 @@ ${loadInfo}`;
                             slotDiv.appendChild(tripCard);
                         });
 
-                        // Append Copy Button for the Slot
-                        const copyBtn = document.createElement('button');
-                        copyBtn.id = `btn-copy-slot-${plate}-${i}`;
-                        copyBtn.onclick = (e) => { e.stopPropagation(); copyAssignedSlot(plate, i); };
-                        copyBtn.className = "absolute top-1 right-1 z-20 text-slate-400 bg-white/80 hover:bg-white hover:text-indigo-600 rounded px-1 shadow border border-slate-200 text-xs no-print transition";
-                        copyBtn.title = "Copiar datos del viaje";
-                        copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i>';
-                        slotDiv.appendChild(copyBtn);
+                        // Append Copy Button for the Slot (ONLY for Groupage Stacks)
+                        // User Request: "en los grupajes cola el boton... esquina inferior izquierda"
+                        // For Full Load (isSingleFullLoad), we REMOVE this button as it's now inside the card.
+                        if (!isSingleFullLoad) {
+                            const copyBtn = document.createElement('button');
+                            copyBtn.id = `btn-copy-slot-${plate}-${i}`;
+                            copyBtn.onclick = (e) => { e.stopPropagation(); copyAssignedSlot(plate, i); };
+                            // Changed position to bottom-1 left-1
+                            copyBtn.className = "absolute bottom-1 left-1 z-20 text-slate-400 bg-white/80 hover:bg-white hover:text-indigo-600 rounded px-1 shadow border border-slate-200 text-xs no-print transition";
+                            copyBtn.title = "Copiar todos los viajes del hueco";
+                            copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i>';
+                            slotDiv.appendChild(copyBtn);
+                        }
 
                         if (isDisabledSlot) { slotDiv.innerHTML = ''; }
                     } else if (isDisabledSlot) {
@@ -1820,9 +1864,17 @@ ${loadInfo}`;
             // NEW: Groupage/Full Load Badge (Top Right, adjusted position based on assignment)
             const loadTypeBadgeRightPos = trip.assignedTruck !== null ? 'right-[115px]' : 'right-1';
 
+            // Generate Copy Button HTML
+            const copyButtonHTML = `
+                <button id="btn-copy-trip-${trip.id}" onclick="event.stopPropagation(); copyTripToClipboard(${trip.id})" 
+                        class="ml-1 text-white/80 hover:text-white transition" title="Copiar viaje">
+                    <i class="fa-regular fa-copy text-[8px]"></i>
+                </button>
+            `;
+
             const loadTypeBadgeHTML = trip.isGroupage
-                ? `<span class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-white text-[8px] font-bold bg-sky-600" title="Viaje de Grupaje">GRU</span>`
-                : `<span class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-slate-600 bg-slate-200 text-[8px] font-bold" title="Viaje de Carga Completa">COMP</span>`;
+                ? `<span class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-white text-[8px] font-bold bg-sky-600 flex items-center" title="Viaje de Grupaje">GRU${copyButtonHTML}</span>`
+                : `<span class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-slate-600 bg-slate-200 text-[8px] font-bold flex items-center" title="Viaje de Carga Completa">COMP${copyButtonHTML.replace('text-white/80 hover:text-white', 'text-slate-500 hover:text-indigo-600')}</span>`;
 
             // Pallet Info Container (PG, EP, PP, CR) - No absolute positioning, added highlighting
             const tripCR = getTripCR(trip);
