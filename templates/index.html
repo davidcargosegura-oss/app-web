@@ -2221,8 +2221,7 @@
                                 const baseColor = z.baseColor;
 
                                 const selectedClasses = isChecked
-                                    ? `bg-${baseColor}-700 outline outline-4 outline-offset-2
-                                            outline-${baseColor}-800`
+                                    ? `bg-${baseColor}-700 outline outline-4 outline-offset-2 outline-${baseColor}-800`
                                     : '';
 
                                 return `
@@ -2239,14 +2238,12 @@
                                             `;
                             }).join('');
 
-                            selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(input
-                                => {
+                            selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(input => {
                                 const zoneLabel = input.nextElementSibling;
                                 const baseColor = ZONE_MAP[input.value].baseColor;
 
                                 input.addEventListener('change', () => {
-                                    selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(innerInput
-                                        => {
+                                    selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(innerInput => {
                                         const innerLabel = innerInput.nextElementSibling;
                                         const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
                                         innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`,
