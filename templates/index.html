@@ -989,6 +989,7 @@
 
             document.getElementById('truckModalTitle').innerText = 'Editar Camión: ' + plate;
             document.getElementById('editTruckPlate').value = plate;
+            document.getElementById('isNewTruck').value = 'false'; // FIX: Mark as edit, not new
             document.getElementById('truckPlateInput').value = plate;
             document.getElementById('truckPlateInput').readOnly = true;
             document.getElementById('truckPlateInput').classList.add('bg-gray-100');
