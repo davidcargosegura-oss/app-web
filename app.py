@@ -535,6 +535,64 @@ def update_db_schema():
     except Exception as e:
         return f"Error updating schema: {e}"
 
+# --- DRIVER & TRAILER CRUD ---
+@app.route('/api/drivers', methods=['POST'])
+@login_required
+def save_driver():
+    d = request.json
+    name = d.get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+    
+    driver = Driver(
+        name=name,
+        dni=d.get('dni', ''),
+        phone=d.get('phone', ''),
+        alias=d.get('alias', '')
+    )
+    db.session.add(driver)
+    db.session.commit()
+    return jsonify(driver.to_dict())
+
+@app.route('/api/drivers/<int:driver_id>', methods=['DELETE'])
+@login_required
+def delete_driver(driver_id):
+    driver = Driver.query.get(driver_id)
+    if driver:
+        db.session.delete(driver)
+        db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/trailers', methods=['POST'])
+@login_required
+def save_trailer():
+    d = request.json
+    plate = d.get('plate', '').strip().upper()
+    if not plate:
+        return jsonify({'error': 'Plate is required'}), 400
+    
+    # Check for duplicates
+    existing = Trailer.query.filter_by(plate=plate).first()
+    if existing:
+        return jsonify({'error': 'Trailer with this plate already exists'}), 400
+        
+    trailer = Trailer(
+        plate=plate,
+        type=d.get('type', '')
+    )
+    db.session.add(trailer)
+    db.session.commit()
+    return jsonify(trailer.to_dict())
+
+@app.route('/api/trailers/<int:trailer_id>', methods=['DELETE'])
+@login_required
+def delete_trailer(trailer_id):
+    trailer = Trailer.query.get(trailer_id)
+    if trailer:
+        db.session.delete(trailer)
+        db.session.commit()
+    return jsonify({'success': True})
+
 @app.route('/api/unassign-day', methods=['POST'])
 @login_required
 def unassign_day():
