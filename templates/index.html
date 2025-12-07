@@ -2030,8 +2030,7 @@ ${loadInfo}`;
                             document.getElementById('loadDate').value = trip.loadDate;
                             document.getElementById('unloadDate').value = trip.unloadDate;
                             document.getElementById('isUrgent').checked = trip.isUrgent;
-                            document.getElementById('isGroupage').checked = trip.isGroupage || false; // NEW:
-                                    Populate isGroupage
+                            document.getElementById('isGroupage').checked = trip.isGroupage || false; // NEW: Populate isGroupage
                             document.querySelector(`input[name="tripType"][value="${trip.type}"]`).checked =
                                 true;
 
@@ -2086,10 +2085,9 @@ ${loadInfo}`;
                                 pg, ep, pp
                             };
 
-                            // Preserve assigned truck/slot if editing, though usually modal is for generic
-                            editing.
-                                // If it's a new trip, they are null by default in backend or we send null.
-                                if(id) {
+                            // Preserve assigned truck/slot if editing, though usually modal is for generic editing.
+                            // If it's a new trip, they are null by default in backend or we send null.
+                            if (id) {
                                 const existingTrip = trips.find(t => t.id === id);
                                 if (existingTrip) {
                                     tripData.assignedTruck = existingTrip.assignedTruck;
@@ -2396,20 +2394,18 @@ ${loadInfo}`;
                                 }
                                 // Si el slot está vacío o solo contiene otros Grupajes, la asignación es permitida.
                             }
-                                    // =========================================================================
+                            // =========================================================================
 
-                                    // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la persistencia del
-                                    camión anterior.
-                                if(trip.assignedTruck && trip.assignedTruck !== plate) {
+                            // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la persistencia del camión anterior.
+                            if (trip.assignedTruck && trip.assignedTruck !== plate) {
                                 await clearTruckPersistence(trip.assignedTruck); // Await for Persistence clear
                             }
 
                             trip.assignedTruck = plate;
                             trip.assignedSlot = slotIndex;
 
-                                    // NEW: If we assign a trip, we allow the location to be auto-updated.
-                                    // This overrides any previous manual setting (but manual setting is saved in
-                                    manualLocation).
+                            // NEW: If we assign a trip, we allow the location to be auto-updated.
+                            // This overrides any previous manual setting (but manual setting is saved in manualLocation).
                             const assignedTruckObj = trucks.find(t => t.plate === plate);
                             if (assignedTruckObj) {
                                 assignedTruckObj.isLocationManual = false;
