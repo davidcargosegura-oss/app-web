@@ -1169,6 +1169,11 @@ ${loadInfo}`;
                 truck.manualZones.push(zoneName);
             }
             truck.zonesLastUpdatedDate = new Date().toISOString().split('T')[0];
+
+            // IMPORTANT: Set effectiveDate so the server saves to history
+            const dateFilter = document.getElementById('dateFilter').value;
+            truck.effectiveDate = dateFilter;
+
             const zone = ZONES.find(z => z.name === zoneName);
             if (zone) {
                 button.classList.toggle(`bg-${zone.baseColor}-500`);
