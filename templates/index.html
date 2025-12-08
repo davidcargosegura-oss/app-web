@@ -1672,27 +1672,30 @@ ${loadInfo}`;
                                             <div class="flex items-center gap-1">
                                                 <i class="fa-solid fa-map-marker-alt text-red-500 text-[8px] flex-shrink-0"></i>
                                                 <input type="text" placeholder="Ubicación manual..."
-                                                    class="font-semibold bg-transparent border-none outline-none w-full min-w-0 text-slate-800"
+                                                    class="font-semibold bg-transparent border-none outline-none flex-1 min-w-0 text-slate-800"
                                                     value="${displayManualLocation}"
                                                     onchange="updateManualLocation('${plate}', this)"
                                                     ondblclick="event.stopPropagation();">
-                                            </div>
-                                            <div class="flex items-center justify-between gap-1 mt-1 flex-wrap">
-                                                <div class="flex items-center gap-0.5 flex-wrap">
-                                                    ${displayManualZones.map(z => {
+                                                <div class="flex items-center gap-0.5 flex-shrink-0">
+                                                    ${displayManualZones.slice(0, 2).map(z => {
                     const zone = ZONES.find(zn => zn.name === z);
-                    return zone ? `<span
-                                                        class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>`
-                        : '';
+                    return zone ? `<span class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>` : '';
                 }).join('')}
+                                                    <button
+                                                        onclick="event.stopPropagation(); openZonePickerModal('${plate}')"
+                                                        class="text-slate-400 hover:text-red-500 transition no-print"
+                                                        title="Seleccionar zonas">
+                                                        <i class="fa-solid fa-plus-circle text-[10px]"></i>
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onclick="event.stopPropagation(); openZonePickerModal('${plate}')"
-                                                    class="text-slate-400 hover:text-red-500 transition no-print flex-shrink-0"
-                                                    title="Seleccionar zonas">
-                                                    <i class="fa-solid fa-plus-circle text-[10px]"></i>
-                                                </button>
                                             </div>
+                                            ${displayManualZones.length > 2 ? `
+                                            <div class="flex items-center gap-0.5 flex-wrap mt-1">
+                                                ${displayManualZones.slice(2).map(z => {
+                    const zone = ZONES.find(zn => zn.name === z);
+                    return zone ? `<span class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>` : '';
+                }).join('')}
+                                            </div>` : ''}
                                         </div>
                                         `;
                 row.appendChild(plateDiv);
