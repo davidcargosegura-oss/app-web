@@ -1555,11 +1555,11 @@ ${loadInfo}`;
                 const baseMinHeight = hasAssignedTripsToday ? 'min-h-[6rem]' : 'min-h-[5rem]';
 
                 const rowClass = isOutOfService
-                    ? `grid grid-cols-[140px_1fr_1fr_1fr_1fr] gap-2 p-2 rounded border-4
+                    ? `grid grid-cols-[160px_1fr_1fr_1fr_1fr] gap-2 p-2 rounded border-4
                                         border-red-500
                                         bg-red-50/50 items-stretch ${baseMinHeight} hover:shadow-xl transition-shadow
                                         truck-out-of-service`
-                    : `grid grid-cols-[140px_1fr_1fr_1fr_1fr] gap-2 bg-white p-2 rounded border
+                    : `grid grid-cols-[160px_1fr_1fr_1fr_1fr] gap-2 bg-white p-2 rounded border
                                         border-slate-200 items-stretch ${baseMinHeight} hover:shadow-md
                                         transition-shadow`;
 
@@ -1669,30 +1669,29 @@ ${loadInfo}`;
 
                                         <!-- RECUADRO MANUAL -->
                                         <div class="bg-white/95 text-slate-800 rounded px-2 py-1 mt-1 text-[10px]">
-                                            <div class="flex justify-between items-center gap-1">
-                                                <div class="flex items-center gap-1 flex-1 min-w-0">
-                                                    <i
-                                                        class="fa-solid fa-map-marker-alt text-red-500 text-[8px] flex-shrink-0"></i>
-                                                    <input type="text" placeholder="-"
-                                                        class="font-semibold bg-transparent border-none outline-none w-full min-w-0 text-slate-800"
-                                                        value="${displayManualLocation}"
-                                                        onchange="updateManualLocation('${plate}', this)"
-                                                        ondblclick="event.stopPropagation();">
-                                                </div>
-                                                <div class="flex items-center gap-0.5 flex-shrink-0">
+                                            <div class="flex items-center gap-1">
+                                                <i class="fa-solid fa-map-marker-alt text-red-500 text-[8px] flex-shrink-0"></i>
+                                                <input type="text" placeholder="Ubicación manual..."
+                                                    class="font-semibold bg-transparent border-none outline-none w-full min-w-0 text-slate-800"
+                                                    value="${displayManualLocation}"
+                                                    onchange="updateManualLocation('${plate}', this)"
+                                                    ondblclick="event.stopPropagation();">
+                                            </div>
+                                            <div class="flex items-center justify-between gap-1 mt-1 flex-wrap">
+                                                <div class="flex items-center gap-0.5 flex-wrap">
                                                     ${displayManualZones.map(z => {
                     const zone = ZONES.find(zn => zn.name === z);
                     return zone ? `<span
                                                         class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>`
                         : '';
                 }).join('')}
-                                                    <button
-                                                        onclick="event.stopPropagation(); openZonePickerModal('${plate}')"
-                                                        class="text-slate-400 hover:text-red-500 transition no-print"
-                                                        title="Seleccionar zonas">
-                                                        <i class="fa-solid fa-plus-circle text-[10px]"></i>
-                                                    </button>
                                                 </div>
+                                                <button
+                                                    onclick="event.stopPropagation(); openZonePickerModal('${plate}')"
+                                                    class="text-slate-400 hover:text-red-500 transition no-print flex-shrink-0"
+                                                    title="Seleccionar zonas">
+                                                    <i class="fa-solid fa-plus-circle text-[10px]"></i>
+                                                </button>
                                             </div>
                                         </div>
                                         `;
