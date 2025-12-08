@@ -749,6 +749,32 @@
             </div>
         </div>
     </div>
+
+    <!-- ZONE PICKER MODAL -->
+    <div id="zonePickerModal"
+        class="fixed inset-0 bg-slate-900/70 hidden flex items-center justify-center z-50 backdrop-blur-sm no-print">
+        <div class="bg-white rounded-lg shadow-2xl w-[400px] p-6 border-t-4 border-indigo-600">
+            <input type="hidden" id="zonePickerTruckPlate">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-slate-800">
+                    <i class="fa-solid fa-map-marked-alt text-indigo-600 mr-2"></i>Seleccionar Zonas
+                </h2>
+                <button onclick="closeZonePickerModal()" class="text-slate-400 hover:text-red-600 transition">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="zonePickerButtons" class="grid grid-cols-2 gap-2">
+                <!-- Zone buttons will be rendered here by openZonePickerModal() -->
+            </div>
+            <div class="mt-4 text-right">
+                <button onclick="closeZonePickerModal()"
+                    class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-4 rounded text-sm transition">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let trucks = [];
         let trips = [];
