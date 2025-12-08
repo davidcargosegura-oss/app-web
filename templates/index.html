@@ -464,13 +464,6 @@
                         placeholder="Nombre Cliente">
                 </div>
 
-                <div>
-                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Conductor</label>
-                    <input type="text" id="driver"
-                        class="w-full border-slate-300 rounded text-sm focus:ring-red-500 focus:border-red-500"
-                        placeholder="Nombre del Conductor (Opcional)">
-                </div>
-
                 <div id="palletInputsContainer" class="bg-red-50 p-3 rounded border border-red-200 hidden">
                     <label class="text-xs font-bold text-red-700 uppercase block mb-2">Cantidad de Palets (CR)</label>
                     <div class="grid grid-cols-3 gap-3">
@@ -1805,9 +1798,18 @@ ${loadInfo}`;
                     (!dateFilter || t.loadDate === dateFilter)
                 );
 
-                const div = document.createElement('div');
+                // Only show zone if it has any value > 0
+                const totalCount = trucksInZone.length + pendingDeparture.length + pendingReturn.length;
+                if (totalCount === 0) return; // Skip zones with all zeros
+
+                const div = document.createElement('button');
                 div.className = `flex flex-col items-center p-2 rounded border ${zone.color}
-                                            bg-opacity-10 border-opacity-20`;
+                                            bg-opacity-10 border-opacity-20 cursor-pointer hover:bg-opacity-30 hover:scale-105 transition-all`;
+                div.title = `Click para filtrar por ${zone.name}`;
+                div.onclick = () => {
+                    document.getElementById('zoneFilter').value = zone.name;
+                    renderAll();
+                };
                 div.innerHTML = `
                                             <span class="text-xs font-bold text-slate-600 mb-1">${zone.code}</span>
                                             <div class="flex gap-2 text-[10px] font-mono">
@@ -1824,6 +1826,7 @@ ${loadInfo}`;
                 container.appendChild(div);
             });
         }
+
 
         function renderUnassigned(dateFilter) {
             const unassignedDepartureZone =
@@ -2228,7 +2231,6 @@ ${loadInfo}`;
             document.getElementById('deleteButton').classList.remove('hidden');
 
             document.getElementById('client').value = trip.client;
-            document.getElementById('driver').value = trip.driver || '';
             document.getElementById('origin').value = trip.origin;
             document.getElementById('destination').value = trip.destination;
             document.getElementById('loadDate').value = trip.loadDate;
@@ -2261,7 +2263,7 @@ ${loadInfo}`;
             const idInput = document.getElementById('editTripId').value;
             const id = idInput ? parseInt(idInput) : null;
             const client = document.getElementById('client').value;
-            const driver = document.getElementById('driver').value;
+            const driver = ''; // Campo eliminado del formulario
             const origin = document.getElementById('origin').value;
             const destination = document.getElementById('destination').value;
             const loadDate = document.getElementById('loadDate').value;
