@@ -1,0 +1,2757 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CARGO SEGURA - Gestor de Tráfico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <style>
+        .draggable-source {
+            cursor: grab;
+        }
+
+        .draggable-source:active {
+            cursor: grabbing;
+        }
+
+        .drop-zone {
+            transition: all 0.2s;
+        }
+
+        .drop-zone.drag-over {
+            background-color: #fee2e2;
+            border: 2px dashed #dc2626;
+            transform: scale(1.02);
+        }
+
+        .notes-area {
+            background-image: linear-gradient(#fef9c3 1px, transparent 1px);
+            background-size: 100% 1.5rem;
+            line-height: 1.5rem;
+            border: none !important;
+            padding: 0 !important;
+            resize: none !important;
+            background-color: transparent !important;
+        }
+
+        /* ELIMINADA altura fija para permitir Stacking/Apilamiento de tarjetas de grupaje */
+        /* .trip-card-fixed { height: 4rem; }  */
+
+        /* --- COLORES CORPORATIVOS --- */
+        .border-departure {
+            border-left-color: #dc2626 !important;
+        }
+
+        .border-return {
+            border-left-color: #1f2937 !important;
+        }
+
+        .border-overdue {
+            border-left-color: #f59e0b !important;
+            border-right: 4px solid #f59e0b !important;
+        }
+
+        @media print {
+            body {
+                background-color: white !important;
+            }
+
+            header,
+            aside,
+            .no-print,
+            .truck-controls {
+                display: none !important;
+            }
+
+            main {
+                margin-top: 0;
+                padding: 0;
+            }
+
+            section {
+                width: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #planning-board {
+                overflow: visible !important;
+                height: auto !important;
+            }
+
+            .trip-card-fixed {
+                height: auto;
+                min-height: 50px;
+            }
+
+            .grid {
+                display: grid !important;
+            }
+        }
+
+        .notify-control {
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            display: flex;
+            align-items: center;
+            width: 105px;
+        }
+
+        .notify-control input {
+            padding: 2px 2px !important;
+            height: 20px;
+            font-size: 10px;
+            line-height: 1;
+            width: 60px;
+            text-align: center;
+        }
+
+        .notify-control button {
+            height: 20px;
+            padding: 1px 4px;
+            width: 45px;
+            line-height: 1;
+            margin-left: -1px;
+        }
+
+        .notify-date {
+            position: absolute;
+            top: 25px;
+            right: 4px;
+            font-size: 9px;
+            line-height: 1;
+            color: #94a3b8;
+            font-family: monospace;
+        }
+
+        .truck-location-input {
+            margin-top: 5px;
+            padding: 1px 4px;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            width: 100%;
+            font-size: 10px;
+            text-align: center;
+            color: #1e293b;
+            background-color: #f8fafc;
+            transition: all 0.1s;
+        }
+
+        .truck-location-input:focus {
+            border-color: #dc2626;
+            outline: none;
+            background-color: white;
+            box-shadow: 0 0 0 1px #dc2626;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Estilos específicos para Fuera de Servicio */
+        .truck-out-of-service .truck-location-input {
+            border-color: #fca5a5 !important;
+            background-color: #fee2e2 !important;
+            color: #991b1b !important;
+        }
+
+        .truck-out-of-service .truck-location-input:focus {
+            border-color: #dc2626 !important;
+            box-shadow: 0 0 0 1px #dc2626 !important;
+        }
+
+        /* Estilos para el selector de zona de viajes (botones/radio) */
+        input[type="radio"]:checked+.zone-label {
+            /* ESTE ESTILO GENERAL ES REEMPLAZADO POR LA LÓGICA CONCRETA DE LA FUNCIÓN JS PARA TENER COLORES DINÁMICOS */
+            outline: 2px solid;
+            outline-offset: 1px;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden font-sans text-slate-800">
+    <!-- BARRA DE NAVEGACIÓN COMPACTA -->
+    <header class="bg-indigo-600 shadow-lg flex-shrink-0">
+        <!-- **CAMBIO: h-16 a h-12 para hacerlo más compacto** -->
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-12">
+            <div class="flex justify-between items-center h-full">
+                <!-- LOGO/TÍTULO -->
+                <div class="flex-shrink-0">
+                    <!-- **CAMBIO: text-xl a text-lg para hacerlo más compacto** -->
+                    <a href="{{ url_for('index') }}" class="text-white text-lg font-bold tracking-wider">
+                        <i class="fas fa-truck-moving mr-2"></i>CARGO SEGURA - Gestor de Tráfico
+                    </a>
+                </div>
+
+                <!-- ENLACES DE NAVEGACIÓN Y AUTENTICACIÓN -->
+                <div class="flex items-center space-x-3">
+                    {% if current_user.is_authenticated %}
+                    <!-- Enlace al Dashboard de Admin (solo visible para administradores) -->
+                    {% if current_user.is_admin %}
+                    <!-- **CAMBIO: py-2 a py-1 para ahorrar espacio** -->
+                    <a href="{{ url_for('admin.index') }}"
+                        class="text-white hover:bg-indigo-700 px-3 py-1 rounded-md text-sm font-medium transition duration-150 ease-in-out">
+                        <i class="fas fa-user-shield mr-1"></i> Panel Admin
+                    </a>
+                    {% endif %}
+
+                    <!-- Enlace de Cerrar Sesión (Logout) - MÁS COMPACTO Y SIN NOMBRE DE USUARIO -->
+                    <!-- **Ajustado: py-1 a py-0.5 y quitado el nombre de usuario** -->
+                    <a href="{{ url_for('logout') }}"
+                        class="bg-red-500 hover:bg-red-600 text-white px-2 py-0.5 rounded-md text-sm font-medium transition duration-150 ease-in-out shadow-lg">
+                        <i class="fas fa-sign-out-alt mr-1"></i> Cerrar Sesión
+                    </a>
+                    {% else %}
+                    <!-- Enlace de Iniciar Sesión (si no está autenticado) -->
+                    <!-- **CAMBIO: py-2 a py-1 para ahorrar espacio** -->
+                    <a href="{{ url_for('login') }}"
+                        class="text-white hover:bg-indigo-700 px-3 py-1 rounded-md text-sm font-medium transition duration-150 ease-in-out">
+                        <i class="fas fa-sign-in-alt mr-1"></i> Iniciar Sesión
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </nav>
+    </header>
+    <!-- FIN DE BARRA DE NAVEGACIÓN -->
+
+    <!-- Manejo de Mensajes Flash (éxito, error, info) -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div
+            class="mb-4 p-4 rounded-lg text-sm {% if category == 'danger' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+    </div>
+    <!-- FIN DE MENSAJES FLASH -->
+
+    <header class="bg-white shadow-sm z-20 flex flex-col no-print border-t-4 border-red-600">
+        <div class="flex items-center justify-between px-6 py-2 border-b border-slate-200 h-16">
+            <div class="flex items-center gap-4">
+                <div class="h-10">
+                    <img src="/static/logo.png" alt="CARGO SEGURA" class="h-full w-auto object-contain"
+                        onerror="this.style.display='none'; document.getElementById('fallback-logo').style.display='flex'">
+                    <div id="fallback-logo" class="hidden flex items-center gap-2 text-red-600">
+                        <i class="fa-solid fa-truck-fast text-2xl"></i>
+                        <span class="font-black text-xl italic tracking-tighter">CARGO SEGURA</span>
+                    </div>
+                </div>
+                <div class="h-6 w-px bg-slate-300 mx-2"></div>
+                <h1 class="text-sm font-bold text-slate-500 uppercase tracking-wider">Gestor de Tráfico</h1>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div id="zone-counters" class="flex items-center gap-1">
+                </div>
+
+                <button onclick="exportToCSV()"
+                    class="text-xs font-bold text-slate-600 hover:text-green-600 transition flex items-center gap-1 border border-slate-300 px-2 py-1 rounded">
+                    <i class="fa-solid fa-download"></i> CSV
+                </button>
+                <button onclick="printPlanning()"
+                    class="text-xs font-bold text-slate-600 hover:text-red-600 transition flex items-center gap-1 border border-slate-300 px-2 py-1 rounded">
+                    <i class="fa-solid fa-print"></i> PDF
+                </button>
+
+                <button onclick="unassignAllTrips()"
+                    class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-1.5 px-3 rounded shadow transition ml-4 flex items-center gap-1"
+                    title="Mueve todos los viajes a Pendientes">
+                    <i class="fa-solid fa-rotate-left"></i> Desasignar Todo
+                </button>
+
+                <div class="flex items-center gap-2 ml-2 bg-red-50 px-2 py-1 rounded border border-red-100">
+                    <label class="text-xs font-bold text-red-700 uppercase"><i class="fa-regular fa-calendar"></i>
+                        Fecha</label>
+                    <input type="date" id="dateFilter" onchange="loadNotesForSelectedDate(); renderAll();"
+                        class="bg-transparent text-xs font-bold text-red-900 outline-none cursor-pointer">
+                </div>
+
+                <div class="flex items-center gap-2 ml-2 bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                    <label class="text-xs font-bold text-slate-700 uppercase"><i class="fa-solid fa-map-pin"></i>
+                        Zona</label>
+                    <select id="zoneFilter" onchange="renderAll()"
+                        class="bg-transparent text-xs font-bold text-slate-900 outline-none cursor-pointer">
+                        <option value="ALL">TODAS</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-yellow-50/50 border-b border-yellow-200 px-6 py-2 flex items-start gap-4">
+            <div class="w-1/3 p-2 bg-white rounded border border-yellow-200 shadow-sm">
+                <label class="text-xs font-bold text-yellow-700 uppercase block mb-1 flex justify-between">
+                    <span>📋 Tareas</span>
+                    <i class="fa-solid fa-thumbtack text-yellow-400"></i>
+                </label>
+                <textarea id="dailyNotes_Tasks"
+                    class="notes-area w-full text-xs text-slate-700 h-12 placeholder-slate-400"
+                    placeholder="Lista de tareas..." oninput="saveNotesForSelectedDate('Tasks')"></textarea>
+            </div>
+            <div class="w-1/3 p-2 bg-white rounded border border-red-200 shadow-sm">
+                <label class="text-xs font-bold text-red-700 uppercase block mb-1 flex justify-between">
+                    <span>🚨 Incidencias</span>
+                    <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+                </label>
+                <textarea id="dailyNotes_Incidents"
+                    class="notes-area w-full text-xs text-slate-700 h-12 placeholder-slate-400"
+                    placeholder="Incidencias urgentes..." oninput="saveNotesForSelectedDate('Incidents')"></textarea>
+            </div>
+            <div class="w-1/3 p-2 bg-white rounded border border-slate-200 shadow-sm">
+                <label class="text-xs font-bold text-slate-600 uppercase block mb-1 flex justify-between">
+                    <span>💬 Info General</span>
+                    <i class="fa-solid fa-circle-info text-slate-400"></i>
+                </label>
+                <textarea id="dailyNotes_General"
+                    class="notes-area w-full text-xs text-slate-700 h-12 placeholder-slate-400"
+                    placeholder="Información general..." oninput="saveNotesForSelectedDate('General')"></textarea>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex flex-1 overflow-hidden">
+
+        <aside class="w-96 bg-white border-r border-slate-200 flex flex-col shadow-lg z-10 no-print">
+            <!-- NEW BUTTON FOR RESOURCES -->
+            <button onclick="openResourcesModal()"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow transition flex items-center gap-1 transform hover:scale-105 mb-2">
+                <i class="fa-solid fa-users-gear"></i> Gestión Recursos
+            </button>
+
+            <div class="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h2 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Pendientes</h2>
+                <button onclick="openModal()"
+                    class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow-md transition flex items-center gap-1 transform hover:scale-105">
+                    <i class="fa-solid fa-plus"></i> Nuevo Viaje
+                </button>
+            </div>
+
+            <div class="p-2 border-b border-slate-100 bg-white">
+                <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Mostrar Tipo de Carga</label>
+                <select id="unassignedTypeFilter" onchange="renderAll()"
+                    class="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 outline-none cursor-pointer p-1.5 rounded">
+                    <option value="ALL">Todos los viajes (Grupaje y Completos)</option>
+                    <option value="DEPARTURE_FULL">Salidas (Completas)</option>
+                    <option value="RETURN_FULL">Retornos (Completos)</option>
+                    <option value="FULL_LOAD">Salidas y Retornos (Completos)</option>
+                    <option value="DEPARTURE_GROUPAGE">Grupajes Salidas</option>
+                    <option value="RETURN_GROUPAGE">Grupaje Retornos</option>
+                    <option value="GROUPAGE">Grupaje Salidas y Retornos</option>
+                </select>
+            </div>
+            <div class="flex-1 flex overflow-hidden">
+                <div class="flex-1 flex flex-col border-r border-slate-200">
+                    <div
+                        class="bg-red-50 px-3 py-1.5 text-[10px] font-bold text-red-700 uppercase border-b border-red-100 flex justify-between items-center">
+                        <span><i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Salidas</span>
+                        <span id="count-departure" class="bg-red-200 text-red-800 px-1.5 rounded-full">0</span>
+                    </div>
+                    <div id="unassigned-departure-zone"
+                        class="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-100/50 drop-zone shadow-inner"
+                        ondragover="allowDrop(event)" ondrop="drop(event, null, null, 'departure')">
+                    </div>
+                </div>
+                <div class="flex-1 flex flex-col">
+                    <div
+                        class="bg-slate-100 px-3 py-1.5 text-[10px] font-bold text-slate-700 uppercase border-b border-slate-200 flex justify-between items-center">
+                        <span><i class="fa-solid fa-arrow-right-to-bracket mr-1"></i> Retornos</span>
+                        <span id="count-return" class="bg-slate-200 text-slate-800 px-1.5 rounded-full">0</span>
+                    </div>
+                    <div id="unassigned-return-zone"
+                        class="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-100/50 drop-zone shadow-inner"
+                        ondragover="allowDrop(event)" ondrop="drop(event, null, null, 'return')">
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <section class="flex-1 flex flex-col overflow-hidden bg-slate-200 relative">
+            <div
+                class="grid grid-cols-[140px_1fr_1fr_1fr_1fr] gap-1 px-4 py-2 bg-white border-b border-slate-300 text-[11px] font-bold text-slate-500 uppercase shadow-sm">
+                <div class="flex items-center justify-between pr-2 pl-1">
+                    <span>Matrícula</span>
+                    <button onclick="addTruck()"
+                        class="text-slate-400 hover:text-red-600 rounded p-1 transition no-print" title="Añadir Camión">
+                        <i class="fa-solid fa-circle-plus text-lg"></i>
+                    </button>
+                </div>
+                <div class="text-center bg-red-50 text-red-700 py-1 rounded border border-red-100">Salida 1</div>
+                <div class="text-center bg-slate-100 text-slate-700 py-1 rounded border border-slate-200">Retorno 1
+                </div>
+                <div class="text-center bg-red-50 text-red-700 py-1 rounded border border-red-100">Salida 2</div>
+                <div class="text-center bg-slate-100 text-slate-700 py-1 rounded border border-slate-200">Retorno 2
+                </div>
+            </div>
+
+            <div id="planning-board" class="flex-1 overflow-y-auto p-4 space-y-2">
+            </div>
+        </section>
+    </main>
+
+    <div id="modal"
+        class="fixed inset-0 bg-slate-900/70 hidden flex items-center justify-center z-50 backdrop-blur-sm no-print">
+        <div
+            class="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden scale-100 transition-transform border-t-4 border-red-600">
+            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center">
+                <h3 id="modalTitle" class="font-bold text-slate-800">Nuevo Viaje</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-red-600 transition"><i
+                        class="fa-solid fa-times text-lg"></i></button>
+            </div>
+            <form id="tripForm" onsubmit="saveTrip(event)" class="p-6 space-y-4">
+                <input type="hidden" id="editTripId">
+
+                <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Zona del Viaje</label>
+                    <div id="tripZoneSelector" class="flex flex-wrap gap-2">
+                    </div>
+                </div>
+                <div class="flex justify-between items-center gap-4 bg-slate-50 p-3 rounded border border-slate-200">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Tipo de Viaje</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" name="tripType" value="departure" checked
+                                    class="form-radio text-red-600 focus:ring-red-500 h-4 w-4 cursor-pointer">
+                                <span class="ml-2 text-sm text-slate-700 font-bold">Salida</span>
+                            </label>
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" name="tripType" value="return"
+                                    class="form-radio text-slate-600 focus:ring-slate-500 h-4 w-4 cursor-pointer">
+                                <span class="ml-2 text-sm text-slate-700 font-bold">Retorno</span>
+                            </label>
+                        </div>
+                    </div>
+                    <label
+                        class="flex flex-col items-center cursor-pointer bg-yellow-50 p-2 rounded border border-yellow-200">
+                        <span class="text-xs font-bold text-yellow-700 uppercase">Urgente</span>
+                        <input type="checkbox" id="isUrgent"
+                            class="form-checkbox text-yellow-600 focus:ring-yellow-500 h-6 w-6 cursor-pointer mt-1">
+                    </label>
+                    <label
+                        class="flex flex-col items-center cursor-pointer bg-sky-50 p-2 rounded border border-sky-200">
+                        <span class="text-xs font-bold text-sky-700 uppercase">Grupaje</span>
+                        <input type="checkbox" id="isGroupage" onchange="togglePalletInputs()"
+                            class="form-checkbox text-sky-600 focus:ring-sky-500 h-6 w-6 cursor-pointer mt-1">
+                    </label>
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Cliente</label>
+                    <input type="text" id="client" required
+                        class="w-full border-slate-300 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                        placeholder="Nombre Cliente">
+                </div>
+
+                <div id="palletInputsContainer" class="bg-red-50 p-3 rounded border border-red-200 hidden">
+                    <label class="text-xs font-bold text-red-700 uppercase block mb-2">Cantidad de Palets (CR)</label>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label class="text-xs font-bold text-red-700 uppercase block mb-1">PG (x1.0)</label>
+                            <input type="number" min="0" id="pg"
+                                class="w-full border-red-300 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                                value="0">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-red-700 uppercase block mb-1">EP (x0.8)</label>
+                            <input type="number" min="0" id="ep"
+                                class="w-full border-red-300 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                                value="0">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-red-700 uppercase block mb-1">PP (x0.666)</label>
+                            <input type="number" min="0" id="pp"
+                                class="w-full border-red-300 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                                value="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Origen</label>
+                        <input type="text" id="origin" required
+                            class="w-full border-slate-300 rounded text-sm focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Destino</label>
+                        <input type="text" id="destination" required
+                            class="w-full border-slate-300 rounded text-sm focus:ring-red-500 focus:border-red-500">
+                    </div>
+                </div>
+
+                <!-- NEW: Destination Zone Selector -->
+                <div class="bg-indigo-50 p-3 rounded border border-indigo-200">
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Zona Destino (Para
+                        actualización automática)</label>
+                    <div id="tripDestinationZoneSelector" class="flex flex-wrap gap-2">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Carga</label>
+                        <input type="date" id="loadDate" required
+                            class="w-full border-slate-300 rounded text-sm focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Descarga</label>
+                        <input type="date" id="unloadDate" required
+                            class="w-full border-slate-300 rounded text-sm focus:ring-red-500 focus:border-red-500">
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" id="deleteButton" onclick="deleteTrip()"
+                        class="w-1/3 bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-600 font-bold py-2.5 rounded transition hidden">
+                        <i class="fa-solid fa-trash"></i> Eliminar
+                    </button>
+                    <button type="submit" id="submitButton"
+                        class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded shadow-lg shadow-red-500/30 transition">
+                        Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL DE CAMIÓN -->
+    <div id="truckModal"
+        class="fixed inset-0 bg-slate-900/70 hidden flex items-center justify-center z-50 backdrop-blur-sm no-print">
+        <div
+            class="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden scale-100 transition-transform border-t-4 border-indigo-600">
+            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center">
+                <h3 id="truckModalTitle" class="font-bold text-slate-800">Nuevo Camión</h3>
+                <button onclick="closeTruckModal()" class="text-slate-400 hover:text-red-600 transition">
+                    <i class="fa-solid fa-times text-lg"></i>
+                </button>
+            </div>
+            <form id="truckForm" onsubmit="saveTruckFromModal(event)" class="p-6 space-y-4">
+                <input type="hidden" id="editTruckPlate">
+                <input type="hidden" id="isNewTruck" value="true">
+
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Matrícula *</label>
+                    <input type="text" id="truckPlateInput" required
+                        class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500 uppercase font-mono font-bold">
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Remolque</label>
+                    <div class="flex gap-2">
+                        <select id="truckTrailerSelect" onchange="onTruckTrailerSelectChange()"
+                            class="w-1/2 border-slate-300 rounded text-sm text-slate-700">
+                            <option value="">Cargando...</option>
+                        </select>
+                        <input type="text" id="truckTrailer" placeholder="Manual"
+                            class="w-1/2 border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2">
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Cargar Conductor</label>
+                        <select id="truckDriverSelect" onchange="onTruckDriverSelectChange()"
+                            class="w-full border-slate-300 rounded text-sm text-slate-700">
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Conductor</label>
+                        <input type="text" id="truckDriverName"
+                            class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alias</label>
+                        <input type="text" id="truckDriverAlias"
+                            class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Teléfono</label>
+                        <input type="tel" id="truckDriverPhone"
+                            class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1">DNI</label>
+                        <input type="text" id="truckDriverDni"
+                            class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Ubicación Manual</label>
+                    <input type="text" id="truckManualLocation" placeholder="Ej: Murcia"
+                        class="w-full border-slate-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" id="deleteTruckButton" onclick="deleteTruckFromModal()"
+                        class="w-1/3 bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-600 font-bold py-2.5 rounded transition hidden">
+                        <i class="fa-solid fa-trash"></i> Eliminar
+                    </button>
+                    <button type="submit" id="submitTruckButton"
+                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded shadow-lg shadow-indigo-500/30 transition">
+                        Guardar Camión
+                    </button>
+                </div>
+        </div>
+        </form>
+    </div>
+    </div>
+
+    <!-- MODAL DE ZONAS MANUALES (para la ficha del camión) -->
+    <div id="zonePickerModal"
+        class="fixed inset-0 bg-slate-900/70 hidden flex items-center justify-center z-50 backdrop-blur-sm no-print">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-sm overflow-hidden border-t-4 border-amber-500">
+            <input type="hidden" id="zonePickerTruckPlate">
+            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center">
+                <h3 class="font-bold text-slate-800">Seleccionar Zonas</h3>
+                <button onclick="closeZonePickerModal()" class="text-slate-400 hover:text-red-600 transition">
+                    <i class="fa-solid fa-times text-lg"></i>
+                </button>
+            </div>
+            <div class="p-4" id="zonePickerButtons">
+                <!-- Los botones de zonas se generan dinámicamente por openZonePickerModal() -->
+            </div>
+        </div>
+    </div>
+
+    <!-- RESOURCES MODAL -->
+    <div id="resourcesModal"
+        class="fixed inset-0 bg-slate-900/70 hidden flex items-center justify-center z-50 backdrop-blur-sm no-print">
+        <div
+            class="bg-white rounded-lg shadow-2xl w-[900px] h-[700px] flex flex-col overflow-hidden border-t-4 border-indigo-600">
+            <!-- Header -->
+            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-users-gear text-indigo-600"></i> Gestión de Recursos
+                    </h2>
+                    <div class="flex bg-slate-200 rounded p-1">
+                        <button id="tab-drivers" onclick="switchResourceTab('drivers')"
+                            class="px-4 py-1 text-sm font-bold rounded transition text-indigo-700 bg-indigo-50 border border-indigo-600">Conductores</button>
+                        <button id="tab-trailers" onclick="switchResourceTab('trailers')"
+                            class="px-4 py-1 text-sm font-bold rounded transition text-slate-600 hover:text-slate-800">Remolques</button>
+                    </div>
+                </div>
+                <button onclick="closeResourcesModal()" class="text-slate-400 hover:text-red-600 transition">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 overflow-auto bg-slate-50 p-6">
+                <!-- DRIVERS PANEL -->
+                <div id="panel-drivers" class="h-full flex flex-col gap-4">
+                    <div class="bg-white rounded border border-slate-200 shadow-sm overflow-hidden flex-1">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-100 text-slate-700 font-bold uppercase text-xs">
+                                <tr>
+                                    <th class="p-3 border-b">Nombre</th>
+                                    <th class="p-3 border-b">DNI</th>
+                                    <th class="p-3 border-b">Teléfono</th>
+                                    <th class="p-3 border-b">Alias</th>
+                                    <th class="p-3 border-b text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="driversListBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                    <form id="driverForm" onsubmit="event.preventDefault(); saveNewDriver();"
+                        class="bg-white p-4 rounded border border-slate-200 shadow-sm flex gap-2 items-end shrink-0">
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre</label>
+                            <input type="text" id="newDriverName" class="w-full border-slate-300 rounded text-sm"
+                                required>
+                        </div>
+                        <div class="w-32">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">DNI</label>
+                            <input type="text" id="newDriverDni" class="w-full border-slate-300 rounded text-sm">
+                        </div>
+                        <div class="w-32">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Teléfono</label>
+                            <input type="text" id="newDriverPhone" class="w-full border-slate-300 rounded text-sm">
+                        </div>
+                        <div class="w-32">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Alias</label>
+                            <input type="text" id="newDriverAlias" class="w-full border-slate-300 rounded text-sm">
+                        </div>
+                        <button type="submit"
+                            class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded text-sm transition">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- TRAILERS PANEL -->
+                <div id="panel-trailers" class="hidden h-full flex flex-col gap-4">
+                    <div class="bg-white rounded border border-slate-200 shadow-sm overflow-hidden flex-1">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-100 text-slate-700 font-bold uppercase text-xs">
+                                <tr>
+                                    <th class="p-3 border-b">Matrícula</th>
+                                    <th class="p-3 border-b">Tipo</th>
+                                    <th class="p-3 border-b text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trailersListBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                    <form id="trailerForm" onsubmit="event.preventDefault(); saveNewTrailer();"
+                        class="bg-white p-4 rounded border border-slate-200 shadow-sm flex gap-2 items-end shrink-0">
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Matrícula</label>
+                            <input type="text" id="newTrailerPlate" class="w-full border-slate-300 rounded text-sm"
+                                required>
+                        </div>
+                        <div class="w-48">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo</label>
+                            <select id="newTrailerType" class="w-full border-slate-300 rounded text-sm">
+                                <option value="Lona">Lona</option>
+                                <option value="Frigo">Frigo</option>
+                            </select>
+                        </div>
+                        <button type="submit"
+                            class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded text-sm transition">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let trucks = [];
+        let trips = [];
+        let drivers = [];
+        let trailers = [];
+        let trucksFdsHistory = {};
+
+        const ZONES = [
+            { name: 'Murcia', color: 'bg-indigo-500', baseColor: 'indigo', code: 'MU' },
+            { name: 'Madrid', color: 'bg-sky-500', baseColor: 'sky', code: 'MA' },
+            { name: 'Valencia', color: 'bg-amber-500', baseColor: 'amber', code: 'VA' },
+            { name: 'Andalucía', color: 'bg-emerald-500', baseColor: 'emerald', code: 'AN' },
+            { name: 'Barcelona', color: 'bg-pink-500', baseColor: 'pink', code: 'BCN' },
+            { name: 'Norte', color: 'bg-slate-500', baseColor: 'slate', code: 'NO' },
+        ];
+        const ZONE_MAP = ZONES.reduce((acc, zone) => {
+            acc[zone.name] = zone;
+            return acc;
+        }, {});
+
+        window.formatDate = function (dateStr) {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        };
+
+        function getTripCR(trip) {
+            const pg = (trip.pg || 0) * 1.0;
+            const ep = (trip.ep || 0) * 0.8;
+            const pp = (trip.pp || 0) * 0.666;
+            return Math.round((pg + ep + pp) * 100) / 100;
+        }
+
+        function compareDates(a, b) {
+            if (!a && !b) return 0;
+            if (!a) return -1;
+            if (!b) return 1;
+            if (a === b) return 0;
+            return a < b ? -1 : 1;
+        } const OLD_DATE = '2000-01-01'; function isOverdue(dateStr) {
+            const today = new
+                Date().toISOString().split('T')[0]; return compareDates(dateStr, today) < 0;
+        } function
+            isTruckActiveForDate(truck, date) {
+            if (compareDates(truck.creationDate, date) > 0) return false;
+            if (truck.deletionDate && compareDates(truck.deletionDate, date) <= 0) return false; return true;
+        }
+        function getTruckDataForDate(truck, date) {
+            let history = []; try {
+                history = typeof
+                    truck.history === 'string' ? JSON.parse(truck.history) : (truck.history || []);
+            } catch (e) {
+                history = [];
+            } let effectiveEntry = null; for (const entry of history) {
+                if
+                    (compareDates(entry.date, date) <= 0) { effectiveEntry = entry; } else { break; }
+            } const
+                resolved = { ...truck }; if (effectiveEntry) {
+                    if (effectiveEntry.trailer !== undefined)
+                        resolved.trailer = effectiveEntry.trailer; if (effectiveEntry.driverName !== undefined)
+                        resolved.driverName = effectiveEntry.driverName; if (effectiveEntry.driverPhone !== undefined)
+                        resolved.driverPhone = effectiveEntry.driverPhone; if (effectiveEntry.driverDni !== undefined)
+                        resolved.driverDni = effectiveEntry.driverDni; if (effectiveEntry.driverAlias !== undefined)
+                        resolved.driverAlias = effectiveEntry.driverAlias; if (effectiveEntry.manualLocation !== undefined)
+                        resolved.manualLocation = effectiveEntry.manualLocation; if (effectiveEntry.manualZones
+                            !== undefined) resolved.manualZones = effectiveEntry.manualZones;
+                } return resolved;
+        } function
+            copyTruckData(plate) {
+            const dateFilter = document.getElementById('dateFilter').value; const
+                truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+
+            const data = getTruckDataForDate(truck, dateFilter);
+
+            const text = `Matrículas: ${plate} / ${data.trailer || ''}
+Conductor: ${data.driverName || ''}
+DNI: ${data.driverDni || ''}
+Teléfono: ${data.driverPhone || ''}
+Alias: ${data.driverAlias || ''}`;
+
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById(`btn-copy-${plate}`);
+                if (btn) {
+                    const originalHTML = btn.innerHTML;
+                    btn.innerHTML = '<i class="fa-solid fa-check text-green-500"></i>';
+                    setTimeout(() => btn.innerHTML = originalHTML, 1000);
+                }
+            }).catch(err => {
+                console.error('Error al copiar: ', err);
+                alert('No se pudo copiar al portapapeles');
+            });
+        }
+
+        function copyAssignedSlot(plate, slotIndex) {
+            const dateFilter = document.getElementById('dateFilter').value;
+            const slotTrips = trips.filter(t =>
+                t.assignedTruck === plate &&
+                t.assignedSlot === slotIndex &&
+                t.loadDate === dateFilter
+            );
+
+            if (slotTrips.length === 0) return;
+
+            slotTrips.sort((a, b) => {
+                if (a.isGroupage && !b.isGroupage) return -1;
+                if (!a.isGroupage && b.isGroupage) return 1;
+                return 0;
+            });
+
+            const parts = slotTrips.map(t => {
+                const pg = t.pg || 0;
+                const ep = t.ep || 0;
+                const pp = t.pp || 0;
+
+                let loadInfo = "Completo";
+                if (t.isGroupage) {
+                    const pallets = [];
+                    if (pg > 0) pallets.push(`${pg}PG`);
+                    if (ep > 0) pallets.push(`${ep}EP`);
+                    if (pp > 0) pallets.push(`${pp}PP`);
+                    loadInfo = pallets.join(' + ') || '0 Palets';
+                }
+
+                return `${t.client || '-'}
+${formatDate(t.loadDate)} / ${t.origin || '-'}
+${formatDate(t.unloadDate)} / ${t.destination || '-'}
+${loadInfo}`;
+            });
+
+            // Calculate totals
+            let totalPG = 0, totalEP = 0, totalPP = 0;
+            slotTrips.forEach(t => {
+                if (t.isGroupage) {
+                    totalPG += t.pg || 0;
+                    totalEP += t.ep || 0;
+                    totalPP += t.pp || 0;
+                }
+            });
+
+            let text = parts.join('\n---------------\n');
+
+            // Add total line if there are groupage trips
+            if (totalPG > 0 || totalEP > 0 || totalPP > 0) {
+                const totalParts = [];
+                if (totalPG > 0) totalParts.push(`${totalPG}PG`);
+                if (totalEP > 0) totalParts.push(`${totalEP}EP`);
+                if (totalPP > 0) totalParts.push(`${totalPP}PP`);
+                text += `\n---------------\nTotal: ${totalParts.join(' + ')}`;
+            }
+
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById(`btn-copy-slot-${plate}-${slotIndex}`);
+                if (btn) {
+                    const originalHTML = btn.innerHTML;
+                    btn.innerHTML = '<i class="fa-solid fa-check text-green-500"></i>';
+                    setTimeout(() => btn.innerHTML = originalHTML, 1000);
+                }
+            }).catch(e => {
+                console.error(e);
+                alert('Error al copiar al portapapeles');
+            });
+        }
+
+        function copyTripToClipboard(tripId) {
+            const trip = trips.find(t => t.id === tripId);
+            if (!trip) return;
+
+            const pg = trip.pg || 0;
+            const ep = trip.ep || 0;
+            const pp = trip.pp || 0;
+
+            let loadInfo = "Completo";
+            if (trip.isGroupage) {
+                const pallets = [];
+                if (pg > 0) pallets.push(`${pg}PG`);
+                if (ep > 0) pallets.push(`${ep}EP`);
+                if (pp > 0) pallets.push(`${pp}PP`);
+                loadInfo = pallets.join(' + ') || '0 Palets';
+            }
+
+            const text = `${trip.client || '-'}
+${formatDate(trip.loadDate)} / ${trip.origin || '-'}
+${formatDate(trip.unloadDate)} / ${trip.destination || '-'}
+${loadInfo}`;
+
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById(`btn-copy-trip-${tripId}`);
+                if (btn) {
+                    const icon = btn.querySelector('i');
+                    const originalClass = icon.className;
+                    icon.className = 'fa-solid fa-check text-green-500';
+                    setTimeout(() => icon.className = originalClass, 1000);
+                }
+            }).catch(err => {
+                console.error(err);
+                alert('No se pudo copiar al portapapeles');
+            });
+        }
+
+        async function clearTruckPersistence(plate) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (truck) {
+                truck.locationLastUpdatedDate = '2000-01-01';
+                try {
+                    await api.saveTruck(truck);
+                } catch (e) { console.error("Error clearing persistence", e); }
+            }
+        }
+
+        async function updateManualLocation(plate, input) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (truck) {
+                const newManualLocation = input.value.trim();
+                truck.manualLocation = newManualLocation;
+                truck.locationLastUpdatedDate = new Date().toISOString().split('T')[0];
+
+                try {
+                    await api.saveTruck(truck);
+                } catch (error) {
+                    console.error(error);
+                    alert("Error guardando ubicación manual: " + error.message);
+                }
+            }
+        }
+
+        function openNewTruckModal() {
+            document.getElementById('truckModalTitle').innerText = 'Nuevo Camión';
+            document.getElementById('editTruckPlate').value = '';
+            document.getElementById('truckPlateInput').value = '';
+            document.getElementById('truckPlateInput').readOnly = false;
+            document.getElementById('truckPlateInput').classList.remove('bg-gray-100');
+
+            renderTruckFormSelectors();
+
+            document.getElementById('truckTrailer').value = '';
+            document.getElementById('truckTrailerSelect').value = '';
+
+            document.getElementById('truckDriverName').value = '';
+            document.getElementById('truckDriverAlias').value = '';
+            document.getElementById('truckDriverPhone').value = '';
+            document.getElementById('truckDriverDni').value = '';
+            document.getElementById('truckDriverSelect').value = '';
+
+            document.getElementById('truckManualLocation').value = '';
+            document.getElementById('deleteTruckButton').classList.add('hidden');
+            document.getElementById('truckModal').classList.remove('hidden');
+        }
+
+        function openTruckModal(plate) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+
+            const dateFilter = document.getElementById('dateFilter').value;
+            const effectiveTruck = getTruckDataForDate(truck, dateFilter);
+
+            document.getElementById('truckModalTitle').innerText = 'Editar Camión: ' + plate;
+            document.getElementById('editTruckPlate').value = plate;
+            document.getElementById('isNewTruck').value = 'false'; // FIX: Mark as edit, not new
+            document.getElementById('truckPlateInput').value = plate;
+            document.getElementById('truckPlateInput').readOnly = true;
+            document.getElementById('truckPlateInput').classList.add('bg-gray-100');
+
+            renderTruckFormSelectors();
+
+            document.getElementById('truckTrailer').value = effectiveTruck.trailer;
+            document.getElementById('truckTrailerSelect').value = '';
+
+            document.getElementById('truckDriverName').value = effectiveTruck.driverName;
+            document.getElementById('truckDriverAlias').value = effectiveTruck.driverAlias;
+            document.getElementById('truckDriverPhone').value = effectiveTruck.driverPhone;
+            document.getElementById('truckDriverDni').value = effectiveTruck.driverDni;
+            document.getElementById('truckDriverSelect').value = '';
+
+            document.getElementById('truckManualLocation').value = effectiveTruck.manualLocation;
+
+            document.getElementById('deleteTruckButton').classList.remove('hidden');
+            document.getElementById('truckModal').classList.remove('hidden');
+        }
+
+        function renderTruckFormSelectors() {
+            const trailerSelect = document.getElementById('truckTrailerSelect');
+            const driverSelect = document.getElementById('truckDriverSelect');
+
+            if (trailerSelect) {
+                trailerSelect.innerHTML = '<option value="">Seleccionar Remolque...</option>' +
+                    trailers.map(t => `<option value="${t.plate}">${t.plate} (${t.type})</option>`).join('');
+            }
+
+            if (driverSelect) {
+                driverSelect.innerHTML = '<option value="">Seleccionar Conductor...</option>' +
+                    drivers.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+            }
+        }
+
+        function onTruckDriverSelectChange() {
+            const driverId = parseInt(document.getElementById('truckDriverSelect').value);
+            const driver = drivers.find(d => d.id === driverId);
+            if (driver) {
+                document.getElementById('truckDriverName').value = driver.name;
+                document.getElementById('truckDriverPhone').value = driver.phone;
+                document.getElementById('truckDriverDni').value = driver.dni;
+                document.getElementById('truckDriverAlias').value = driver.alias;
+            }
+        }
+
+        function onTruckTrailerSelectChange() {
+            const trailerPlate = document.getElementById('truckTrailerSelect').value;
+            if (trailerPlate) {
+                document.getElementById('truckTrailer').value = trailerPlate;
+            }
+        }
+
+        function closeTruckModal() {
+            document.getElementById('truckModal').classList.add('hidden');
+            document.getElementById('truckForm').reset();
+        }
+
+        function renderTruckManualZonesSelector(selectedZones = []) {
+            // Function kept for compatibility if needed, but UI element removed
+        }
+
+        async function saveTruckFromModal(event) {
+            event.preventDefault();
+            const isNew = document.getElementById('isNewTruck').value === 'true';
+            const plate = document.getElementById('truckPlateInput').value.toUpperCase().trim();
+
+            if (!plate) {
+                alert('La matrícula es obligatoria');
+                return;
+            }
+
+            if (isNew && trucks.some(t => t.plate === plate)) {
+                alert('Ya existe un camión con esta matrícula.');
+                return;
+            }
+
+            let truck = trucks.find(t => t.plate === plate);
+            if (!truck) {
+                truck = {
+                    plate: plate,
+                    location: '',
+                    zones: [],
+                    creationDate: new Date().toISOString().split('T')[0]
+                };
+            }
+
+            const dateFilter = document.getElementById('dateFilter').value;
+            truck.effectiveDate = dateFilter;
+
+            truck.trailer = document.getElementById('truckTrailer').value.trim();
+            truck.driverName = document.getElementById('truckDriverName').value.trim();
+            truck.driverAlias = document.getElementById('truckDriverAlias').value.trim();
+            truck.driverPhone = document.getElementById('truckDriverPhone').value.trim();
+            truck.driverDni = document.getElementById('truckDriverDni').value.trim();
+            truck.manualLocation = document.getElementById('truckManualLocation').value.trim();
+
+            try {
+                await api.saveTruck(truck);
+                closeTruckModal();
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert('Error guardando camión: ' + error.message);
+            }
+        }
+
+        async function deleteTruckFromModal() {
+            const plate = document.getElementById('editTruckPlate').value;
+            if (!plate) return;
+            if (!confirm(`¿Eliminar el camión ${plate}? Esta acción es irreversible.`)) return;
+            try {
+                await api.deleteTruck(plate);
+                closeTruckModal();
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert('Error eliminando camión: ' + error.message);
+            }
+        }
+
+        function addTruck() {
+            openNewTruckModal();
+        }
+
+        function openZonePickerModal(plate) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+            document.getElementById('zonePickerTruckPlate').value = plate;
+            const container = document.getElementById('zonePickerButtons');
+            container.innerHTML = ZONES.map(z => {
+                const isSelected = (truck.manualZones || []).includes(z.name);
+                return `
+                        <button type="button" onclick="toggleZoneInPicker('${plate}', '${z.name}', this)"
+                            class="zone-picker-btn px-4 py-2 rounded-lg font-bold text-sm transition-all border-2 border-${z.baseColor}-400
+                                   ${isSelected ? `bg-${z.baseColor}-500 text-white` : `bg-white text-${z.baseColor}-700`}">
+                            ${z.name}
+                        </button>`;
+            }).join('');
+            document.getElementById('zonePickerModal').classList.remove('hidden');
+        }
+
+        function closeZonePickerModal() {
+            document.getElementById('zonePickerModal').classList.add('hidden');
+        }
+
+        async function toggleZoneInPicker(plate, zoneName, button) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+            if (!truck.manualZones) truck.manualZones = [];
+            const hasZone = truck.manualZones.includes(zoneName);
+            if (hasZone) {
+                truck.manualZones = truck.manualZones.filter(z => z !== zoneName);
+            } else {
+                truck.manualZones.push(zoneName);
+            }
+            truck.zonesLastUpdatedDate = new Date().toISOString().split('T')[0];
+
+            // IMPORTANT: Set effectiveDate so the server saves to history
+            const dateFilter = document.getElementById('dateFilter').value;
+            truck.effectiveDate = dateFilter;
+
+            const zone = ZONES.find(z => z.name === zoneName);
+            if (zone) {
+                button.classList.toggle(`bg-${zone.baseColor}-500`);
+                button.classList.toggle('text-white');
+                button.classList.toggle('bg-white');
+                button.classList.toggle(`text-${zone.baseColor}-700`);
+            }
+            try {
+                await api.saveTruck(truck);
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert('Error guardando zonas: ' + error.message);
+            }
+        }
+
+        async function deleteTruck(plate) {
+            if (!confirm(`¿Estás seguro de ELIMINAR el camión ${plate}?`)) return;
+            try {
+                await api.deleteTruck(plate);
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert("Error eliminando camión: " + error.message);
+            }
+        }
+
+        async function toggleZone(plate, zoneName) {
+            const truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+            const hasZone = truck.zones.includes(zoneName);
+            if (hasZone) {
+                truck.zones = truck.zones.filter(z => z !== zoneName);
+            } else {
+                truck.zones.push(zoneName);
+            }
+            truck.isZoneManual = true;
+            truck.zonesLastUpdatedDate = new Date().toISOString().split('T')[0];
+            try {
+                await api.saveTruck(truck);
+                await loadData();
+            } catch (error) {
+                console.error(error);
+                alert("Error actualizando zona: " + error.message);
+            }
+        }
+
+        function getTruckSuggestedLocation(truck, currentDate, forceRecalculate = false) {
+            const completedTrips = trips.filter(t =>
+                t.assignedTruck === truck.plate &&
+                compareDates(t.unloadDate, currentDate) <= 0); if (completedTrips.length === 0) {
+                    return
+                    truck.location || '';
+                } completedTrips.sort((a, b) => {
+                    const aSameDay = (a.loadDate === currentDate && a.unloadDate === currentDate);
+                    const bSameDay = (b.loadDate === currentDate && b.unloadDate === currentDate);
+                    if (aSameDay && !bSameDay) return -1;
+                    if (!aSameDay && bSameDay) return 1;
+
+                    const dateComparison = compareDates(b.unloadDate, a.unloadDate);
+                    if (dateComparison !== 0) return dateComparison;
+
+                    return (b.assignedSlot || 0) - (a.assignedSlot || 0);
+                });
+
+            const lastCompletedTrip = completedTrips[0];
+            const calculatedLocation = lastCompletedTrip.destination;
+
+            if (truck.location !== calculatedLocation) {
+                truck.location = calculatedLocation;
+                truck.locationLastUpdatedDate = currentDate;
+
+                const zonesManualApplies = truck.isZoneManual && compareDates(currentDate,
+                    truck.zonesLastUpdatedDate || '2000-01-01') >= 0;
+                if (!zonesManualApplies) {
+                    let newZones = [];
+                    if (lastCompletedTrip.destinationZone) {
+                        newZones = [lastCompletedTrip.destinationZone];
+                    } else {
+                        const matchedZone = ZONES.find(z => z.name.toLowerCase() ===
+                            calculatedLocation.toLowerCase());
+                        if (matchedZone) {
+                            newZones = [matchedZone.name];
+                        }
+                    }
+
+                    const currentZonesStr = truck.zones.slice().sort().join(',');
+                    const newZonesStr = newZones.slice().sort().join(',');
+
+                    if (currentZonesStr !== newZonesStr) {
+                        truck.zones = newZones;
+                    }
+                }
+
+                api.saveTruck(truck);
+            }
+
+            return calculatedLocation;
+        }
+
+        const api = {
+            async getInitialData() {
+                const res = await fetch('/api/initial-data');
+                if (!res.ok) throw new Error(await res.text());
+                return await res.json();
+            },
+            async saveTruck(truck) {
+                const res = await fetch('/api/trucks', {
+                    method: 'POST', headers: {
+                        'Content-Type':
+                            'application/json'
+                    }, body: JSON.stringify(truck)
+                });
+                if (!res.ok) throw new Error(await res.text());
+            },
+            async deleteTruck(plate) {
+                const res = await fetch('/api/delete-truck', {
+                    method: 'POST', headers: {
+                        'Content-Type':
+                            'application/json'
+                    }, body: JSON.stringify({ plate })
+                });
+                if (!res.ok) throw new Error(await res.text());
+            },
+            async saveTrip(trip) {
+                const res = await fetch('/api/trips', {
+                    method: 'POST', headers: {
+                        'Content-Type':
+                            'application/json'
+                    }, body: JSON.stringify(trip)
+                });
+                if (!res.ok) throw new Error(await res.text());
+            },
+            async deleteTrip(id) {
+                const res = await fetch(`/api/trips/${id}`, {
+                    method: 'DELETE'
+                });
+                if (!res.ok) throw new Error(await res.text());
+            },
+            async unassignDay(date) {
+                const res = await fetch('/api/unassign-day', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date })
+                });
+                if (!res.ok) throw new Error(await res.text());
+            },
+            async toggleFds(plate, date, is_out_of_service) {
+                const res = await fetch('/api/toggle-fds', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plate, date, is_out_of_service })
+                });
+                if (!res.ok) throw new Error(await res.text());
+            },
+            async saveNote(date, type, content) {
+                const res = await fetch('/api/notes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date, type, content })
+                });
+                if (!res.ok) throw new Error(await res.text());
+            },
+            async getNote(date, type) {
+                const res = await fetch(`/api/notes?date=${date}&type=${type}`);
+                if (!res.ok) throw new Error(await res.text());
+                return await res.json();
+            },
+            async saveDriver(driver) {
+                const response = await fetch('/api/drivers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(driver)
+                });
+                if (!response.ok) throw new Error('Error guardando conductor');
+                return await response.json();
+            },
+            async deleteDriver(id) {
+                const response = await fetch(`/api/drivers/${id}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error('Error eliminando conductor');
+            },
+            async saveTrailer(trailer) {
+                const response = await fetch('/api/trailers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(trailer)
+                });
+                if (!response.ok) throw new Error('Error guardando remolque');
+                return await response.json();
+            },
+            async deleteTrailer(id) {
+                const response = await fetch(`/api/trailers/${id}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error('Error eliminando remolque');
+            }
+        };
+
+        const saveNoteTimeouts = {};
+        function saveNotesForSelectedDate(type) {
+            clearTimeout(saveNoteTimeouts[type]);
+            saveNoteTimeouts[type] = setTimeout(async () => {
+                const date = document.getElementById('dateFilter').value;
+                const el = document.getElementById(`dailyNotes_${type}`);
+                if (!el) return;
+                try {
+                    await api.saveNote(date, type, el.value);
+                } catch (e) { console.error("Error saving note", type, e); }
+            }, 800);
+        }
+
+        async function loadNotesForSelectedDate() {
+            const date = document.getElementById('dateFilter').value;
+            const types = ['Tasks', 'Incidents', 'General'];
+            for (const type of types) {
+                try {
+                    const data = await api.getNote(date, type);
+                    const el = document.getElementById(`dailyNotes_${type}`);
+                    if (el) el.value = data.content || '';
+                } catch (e) {
+                    console.error("Error loading note", type, e);
+                    const el = document.getElementById(`dailyNotes_${type}`);
+                    if (el) el.value = '';
+                }
+            }
+        }
+
+        async function loadData() {
+            try {
+                const data = await api.getInitialData();
+                trucks = data.trucks || [];
+                trips = data.trips || [];
+                drivers = data.drivers || [];
+                trailers = data.trailers || [];
+
+                // Process FDS history
+                trucksFdsHistory = {};
+                const fdsRecords = data.fds_data || [];
+                fdsRecords.forEach(r => {
+                    if (!trucksFdsHistory[r.plate]) trucksFdsHistory[r.plate] = [];
+                    trucksFdsHistory[r.plate].push(r);
+                });
+                // Sort history by date descending for easier lookup
+                Object.keys(trucksFdsHistory).forEach(plate => {
+                    trucksFdsHistory[plate].sort((a, b) => compareDates(b.date, a.date)); // Latest first
+                });
+
+                console.log("Datos cargados:", {
+                    trucks: trucks.length, trips: trips.length, fdsEvents:
+                        fdsRecords.length
+                });
+
+                // Ensure default date
+                const dateFilterElement = document.getElementById('dateFilter');
+                if (!dateFilterElement.value) {
+                    dateFilterElement.value = new Date().toISOString().split('T')[0];
+                }
+
+                console.log("Fecha filtro:", dateFilterElement.value);
+
+                // Zone filter logic...
+                const zoneFilterEl = document.getElementById('zoneFilter');
+                if (zoneFilterEl.options.length <= 1) {
+                    ZONES.forEach(z => {
+                        const option = document.createElement('option');
+                        option.value = z.name;
+                        option.textContent = z.name;
+                        zoneFilterEl.appendChild(option);
+                    });
+                }
+
+                loadNotesForSelectedDate();
+                renderAll();
+
+            } catch (error) {
+                console.error("Error loading data:", error);
+                alert("Error cargando datos del servidor. Ver consola.");
+            }
+        }
+
+        // ... helpers ...
+
+        function isTruckOutOfService(plate, date) {
+            const history = trucksFdsHistory[plate];
+            if (!history || history.length === 0) return false;
+
+            // Find the latest event that happened ON or BEFORE the target date
+            // Since history is sorted descending (latest first), we just find the first one <= date
+            const latestEvent = history.find(e => compareDates(e.date, date) <= 0); return
+            latestEvent ? latestEvent.is_out_of_service : false;
+        } async function
+            toggleOutOfService(plate) {
+            const
+                dateFilter = document.getElementById('dateFilter').value; const
+                    truck = trucks.find(t => t.plate === plate);
+            if (!truck) return;
+
+            const currentState = isTruckOutOfService(plate, dateFilter);
+            const newState = !currentState; // Toggle state
+
+            // Logic for visual feedback and unassignment
+            if (newState) {
+                clearTruckPersistence(plate);
+                const tripsToUnassign = trips.filter(t => t.assignedTruck === plate &&
+                    t.loadDate ===
+                    dateFilter);
+                for (const t of tripsToUnassign) {
+                    t.assignedTruck = null;
+                    t.assignedSlot = null;
+                    t.notifyTime = "";
+                    t.isNotified = false;
+                    await api.saveTrip(t);
+                }
+                alert(`Camión ${plate} marcado como "Fuera de Servicio" a partir del
+                                        ${formatDate(dateFilter)}. Sus viajes DE HOY han sido movidos a Pendientes.`);
+            } else {
+                alert(`Camión ${plate} marcado como "En Servicio" a partir del
+                                        ${formatDate(dateFilter)}.`);
+            }
+
+            await api.toggleFds(plate, dateFilter, newState);
+            await loadData(); // Reload to refresh history and rendering
+        }
+
+        function renderAll() {
+            const dateFilter = document.getElementById('dateFilter').value;
+            console.log("Renderizando Todo para:", dateFilter);
+            renderUnassigned(dateFilter);
+            renderPlanning(dateFilter);
+            renderZoneCounters(dateFilter);
+        }
+
+        // ...
+
+        function renderPlanning(dateFilter) {
+            const board = document.getElementById('planning-board');
+            board.innerHTML = '';
+
+            const selectedZoneFilter = document.getElementById('zoneFilter').value;
+
+            // Debug logic
+            trucks.forEach(t => {
+                const isActive = isTruckActiveForDate(t, dateFilter);
+            });
+
+            // Filter Active Trucks
+            let activeTrucks = trucks.filter(t => isTruckActiveForDate(t, dateFilter));
+            console.log(`Camiones activos hoy (${dateFilter}): ${activeTrucks.length} de
+                                        ${trucks.length}`);
+
+            // Apply Zone Filter (Auto OR Manual)
+            if (selectedZoneFilter !== 'ALL') {
+                activeTrucks = activeTrucks.filter(t => {
+                    // Check effective data for manual zones validity
+                    const eff = getTruckDataForDate(t, dateFilter);
+                    const hasAuto = eff.zones && eff.zones.includes(selectedZoneFilter);
+                    const hasManual = eff.manualZones &&
+                        eff.manualZones.includes(selectedZoneFilter);
+                    return hasAuto || hasManual;
+                });
+            }
+
+            const inServiceTrucks = activeTrucks.filter(t => !isTruckOutOfService(t.plate,
+                dateFilter)).sort((a, b) => a.plate.localeCompare(b.plate));
+            const outOfServiceTrucks = activeTrucks.filter(t => isTruckOutOfService(t.plate,
+                dateFilter));
+            const sortedTrucks = [...inServiceTrucks, ...outOfServiceTrucks];
+
+            sortedTrucks.forEach(rawTruck => {
+                // Resolve Truck Data for Display (Temporal)
+                const truck = getTruckDataForDate(rawTruck, dateFilter);
+
+                const plate = truck.plate;
+                const isOutOfService = isTruckOutOfService(plate, dateFilter);
+
+                const firstZone = truck.zones.length > 0 ? ZONE_MAP[truck.zones[0]] : null;
+                const baseColor = firstZone ? firstZone.baseColor : 'slate';
+
+                // Calculate assigned trips
+                const assignedTrips = trips.filter(t =>
+                    t.assignedTruck === plate &&
+                    t.loadDate === dateFilter
+                );
+
+                const hasAssignedTripsToday = assignedTrips.length > 0;
+                const hasGroupageAssigned = assignedTrips.some(t => t.isGroupage === true);
+
+                const baseMinHeight = hasAssignedTripsToday ? 'min-h-[6rem]' : 'min-h-[5rem]';
+
+                const rowClass = isOutOfService
+                    ? `grid grid-cols-[160px_1fr_1fr_1fr_1fr] gap-2 p-2 rounded border-4
+                                        border-red-500
+                                        bg-red-50/50 items-stretch ${baseMinHeight} hover:shadow-xl transition-shadow
+                                        truck-out-of-service`
+                    : `grid grid-cols-[160px_1fr_1fr_1fr_1fr] gap-2 bg-white p-2 rounded border
+                                        border-slate-200 items-stretch ${baseMinHeight} hover:shadow-md
+                                        transition-shadow`;
+
+                const plateBgClass = isOutOfService
+                    ? 'bg-red-700'
+                    : `bg-${baseColor}-800`;
+
+                const row = document.createElement('div');
+                row.className = rowClass;
+
+                // For display location, we need to run the calc on the RAW truck object
+                // because it might update intrinsic state (though we are careful).
+                // But display depends on render.
+                const displayLocation = getTruckSuggestedLocation(rawTruck, dateFilter);
+
+                // Use effective truck manual data
+                const displayManualLocation = truck.manualLocation || '';
+                const displayManualZones = truck.manualZones || [];
+
+                const totalTruckCR = assignedTrips.reduce((sum, t) => sum + getTripCR(t), 0);
+                const formattedTruckCR = (Math.round(totalTruckCR * 10) / 10).toFixed(1);
+
+                // NEW: Pallet Summary
+                const totalTruckPG = assignedTrips.reduce((sum, t) => sum + (t.pg || 0), 0);
+                const totalTruckEP = assignedTrips.reduce((sum, t) => sum + (t.ep || 0), 0);
+                const totalTruckPP = assignedTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
+
+                let palletSummaryHTML = '';
+                const trailerHTML = truck.trailer ? `<div
+                                            class="text-[10px] text-center font-mono text-slate-200 mt-0.5 tracking-tighter"
+                                            title="Remolque"><i
+                                                class="fa-solid fa-trailer mr-1 text-[8px] opacity-70"></i>${truck.trailer}
+                                        </div>` : '';
+                if (hasGroupageAssigned) {
+                    palletSummaryHTML = `
+                                        <div class="text-center text-white text-[10px] font-bold mt-1">
+                                            <span
+                                                class="bg-red-600/90 text-white px-2 py-0.5 rounded-full shadow-md">CR:
+                                                ${formattedTruckCR}</span>
+                                        </div>
+                                        <div
+                                            class="flex justify-center gap-1 mt-1 mb-0 text-center text-white text-[9px] font-bold">
+                                            <span class="bg-white/10 px-1 rounded"
+                                                title="Palets Grandes (PG)">PG:${totalTruckPG}</span>
+                                            <span class="bg-white/10 px-1 rounded"
+                                                title="Euro Palets (EP)">EP:${totalTruckEP}</span>
+                                            <span class="bg-white/10 px-1 rounded"
+                                                title="Medios Palets (PP)">PP:${totalTruckPP}</span>
+                                        </div>
+                                        `;
+                }
+
+                const plateDiv = document.createElement('div');
+                const plateDivClass = `flex flex-col justify-between ${plateBgClass} text-white
+                                        rounded
+                                        p-2 shadow-inner relative group`;
+
+                plateDiv.className = plateDivClass;
+                // NEW UI: Header with OutOfService on LEFT, and Copy/Edit on RIGHT
+                plateDiv.innerHTML = `
+                                        <div class="flex justify-between items-start">
+                                            <div class="flex items-center gap-1">
+                                                <i
+                                                    class="fa-solid fa-truck ${isOutOfService ? 'text-red-300' : 'text-slate-500'} text-xs"></i>
+                                                <button
+                                                    onclick="event.stopPropagation(); toggleOutOfService('${plate}')"
+                                                    class="${isOutOfService ? 'text-red-400' : 'text-slate-500'} hover:text-amber-400 transition opacity-0 group-hover:opacity-100 no-print"
+                                                    title="${isOutOfService ? 'Quitar Fuera de Servicio' : 'Marcar Fuera de Servicio'}">
+                                                    <i class="fa-solid fa-power-off text-xs"></i>
+                                                </button>
+                                            </div>
+                                            <div class="flex items-center gap-1">
+                                                <button onclick="event.stopPropagation(); copyTruckData('${plate}')"
+                                                    id="btn-copy-${plate}"
+                                                    class="text-slate-400 hover:text-white transition opacity-0 group-hover:opacity-100 no-print"
+                                                    title="Copiar datos">
+                                                    <i class="fa-solid fa-copy text-xs"></i>
+                                                </button>
+                                                <button onclick="event.stopPropagation(); openTruckModal('${plate}')"
+                                                    class="text-slate-400 hover:text-white transition opacity-0 group-hover:opacity-100 no-print"
+                                                    title="Editar camión">
+                                                    <i class="fa-solid fa-pen text-xs"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="font-mono font-bold text-sm tracking-wider text-center mt-1 border-2 border-white/20 rounded px-1 py-0.5 cursor-pointer hover:bg-white/10 transition ${isOutOfService ? 'bg-red-800' : `bg-${baseColor}-900`}"
+                                            onclick="openTruckModal('${plate}')" title="Click para editar">${plate}
+                                        </div>
+                                        ${trailerHTML}
+
+                                        ${palletSummaryHTML}
+
+                                        <!-- RECUADRO AUTO -->
+                                        <div class="bg-white/95 text-slate-800 rounded px-2 py-1 mt-1 text-[10px]">
+                                            <div class="flex justify-between items-center">
+                                                <span class="font-semibold">${displayLocation || '-'}</span>
+                                                <span class="flex gap-0.5">
+                                                    ${truck.zones.map(z => {
+                    const zone = ZONES.find(zn => zn.name === z);
+                    return zone ? `<span
+                                                        class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>`
+                        : '';
+                }).join('')}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <!-- RECUADRO MANUAL -->
+                                        <div class="bg-white/95 text-slate-800 rounded px-2 py-1 mt-1 text-[10px]">
+                                            <div class="flex items-center gap-1">
+                                                <i class="fa-solid fa-map-marker-alt text-red-500 text-[8px] flex-shrink-0"></i>
+                                                <input type="text" placeholder="Ubicación manual..."
+                                                    class="font-semibold bg-transparent border-none outline-none flex-1 min-w-0 text-slate-800"
+                                                    value="${displayManualLocation}"
+                                                    onchange="updateManualLocation('${plate}', this)"
+                                                    ondblclick="event.stopPropagation();">
+                                                <div class="flex items-center gap-0.5 flex-shrink-0">
+                                                    ${displayManualZones.slice(0, 2).map(z => {
+                    const zone = ZONES.find(zn => zn.name === z);
+                    return zone ? `<span class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>` : '';
+                }).join('')}
+                                                    <button
+                                                        onclick="event.stopPropagation(); openZonePickerModal('${plate}')"
+                                                        class="text-slate-400 hover:text-red-500 transition no-print"
+                                                        title="Seleccionar zonas">
+                                                        <i class="fa-solid fa-plus-circle text-[10px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            ${displayManualZones.length > 2 ? `
+                                            <div class="flex items-center gap-0.5 flex-wrap mt-1">
+                                                ${displayManualZones.slice(2).map(z => {
+                    const zone = ZONES.find(zn => zn.name === z);
+                    return zone ? `<span class="bg-${zone.baseColor}-500 text-white px-1 rounded text-[8px] font-bold">${zone.code}</span>` : '';
+                }).join('')}
+                                            </div>` : ''}
+                                        </div>
+                                        `;
+                row.appendChild(plateDiv);
+
+                for (let i = 0; i < 4; i++) {
+                    const isReturn = i % 2 !== 0; const
+                        slotDiv = document.createElement('div'); const isDisabledSlot = isOutOfService;
+                    const slotClasses = isDisabledSlot
+                        ? 'border-red-300 bg-red-100/50 cursor-not-allowed' : (isReturn
+                            ? 'border-slate-300 bg-slate-50/50' : 'border-red-200 bg-red-50/30');
+                    slotDiv.className = `drop-zone rounded border-2 border-dashed flex flex-col
+                                            justify-start p-1 relative transition-colors h-full ${slotClasses}
+                                            space-y-1`; if (!isDisabledSlot) {
+                        slotDiv.setAttribute('ondragover', 'allowDrop(event)');
+                        slotDiv.setAttribute('ondrop', `drop(event, '${plate}' , ${i})`);
+                    } else {
+                        slotDiv.setAttribute('ondragover', 'event.preventDefault()');
+                        slotDiv.setAttribute('ondrop', 'event.preventDefault()');
+                    }
+                    slotDiv.setAttribute('data-slottype', isReturn ? 'return' : 'departure');
+                    const assignedTripsInSlot = trips.filter(t =>
+                        t.assignedTruck === plate &&
+                        t.assignedSlot === i &&
+                        t.loadDate === dateFilter
+                    );
+
+                    if (assignedTripsInSlot.length > 0) {
+                        const isSingleFullLoad = assignedTripsInSlot.length === 1 &&
+                            assignedTripsInSlot[0].isGroupage === false;
+                        assignedTripsInSlot.sort((a, b) => {
+                            if (a.isGroupage && !b.isGroupage) return -1;
+                            if (!a.isGroupage && b.isGroupage) return 1;
+                            return 0;
+                        }).forEach(trip => {
+                            const tripCard = createTripCard(trip, isSingleFullLoad);
+                            if (!isSingleFullLoad) {
+                                tripCard.style.marginBottom = '4px';
+                            } else {
+                                tripCard.style.marginBottom = '0';
+                                tripCard.style.maxHeight = '100%';
+                            }
+                            slotDiv.appendChild(tripCard);
+                        });
+
+                        // Append Copy Button for the Slot (ONLY for Groupage Stacks)
+                        // User Request: "en los grupajes cola el boton... esquina inferior izquierda"
+                        // For Full Load (isSingleFullLoad), we REMOVE this button as it's now inside the card.
+                        if (!isSingleFullLoad) {
+                            const copyBtn = document.createElement('button');
+                            copyBtn.id = `btn-copy-slot-${plate}-${i}`;
+                            copyBtn.onclick = (e) => {
+                                e.stopPropagation(); copyAssignedSlot(plate, i);
+                            };
+                            // Changed position to bottom-1 left-1
+                            copyBtn.className = "absolute bottom-1 left-1 z-20 text-slate-400 bg-white/80 hover:bg-white hover:text-indigo-600 rounded px-1 shadow border border-slate-200 text-xs no-print transition";
+                            copyBtn.title = "Copiar todos los viajes del hueco";
+                            copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i>';
+                            slotDiv.appendChild(copyBtn);
+                        }
+
+                        if (isDisabledSlot) { slotDiv.innerHTML = ''; }
+                    } else if (isDisabledSlot) {
+                        slotDiv.innerHTML = `<span
+                                                class="text-[9px] text-center text-red-500 font-bold uppercase select-none pointer-events-none absolute inset-0 flex items-center justify-center rotate-45">FUERA
+                                                DE SERVICIO</span>`;
+                    } else {
+                        slotDiv.innerHTML = `<span
+                                                class="text-[9px] text-center text-slate-300 font-bold uppercase select-none pointer-events-none absolute inset-0 flex items-center justify-center">${isReturn
+                                ? 'RET' : 'SAL'} ${Math.floor(i / 2) + 1}</span>`;
+                    }
+                    row.appendChild(slotDiv);
+                }
+                board.appendChild(row);
+            });
+        }
+
+        // Render Zone Counters (Top Statistics)
+        function renderZoneCounters(dateFilter) {
+            const container = document.getElementById('zone-counters');
+            container.innerHTML = '';
+
+            ZONES.forEach((zone) => {
+                // Count TRUCKS in this zone
+                const trucksInZone = trucks.filter(t =>
+                    isTruckActiveForDate(t, dateFilter) &&
+                    !isTruckOutOfService(t.plate, dateFilter) &&
+                    t.zones.includes(zone.name)
+                );
+
+                // Count PENDING TRIPS for this zone (Origin = Zone)
+                const pendingDeparture = trips.filter(t =>
+                    t.assignedTruck === null &&
+                    t.zone === zone.name &&
+                    t.type === 'departure' &&
+                    (!dateFilter || t.loadDate === dateFilter)
+                );
+
+                const pendingReturn = trips.filter(t =>
+                    t.assignedTruck === null &&
+                    t.zone === zone.name &&
+                    t.type === 'return' &&
+                    (!dateFilter || t.loadDate === dateFilter)
+                );
+
+                // Only show zone if it has any value > 0
+                const totalCount = trucksInZone.length + pendingDeparture.length + pendingReturn.length;
+                if (totalCount === 0) return; // Skip zones with all zeros
+
+                const div = document.createElement('button');
+                div.className = `flex flex-col items-center p-2 rounded border ${zone.color}
+                                            bg-opacity-10 border-opacity-20 cursor-pointer hover:bg-opacity-30 hover:scale-105 transition-all`;
+                div.title = `Click para filtrar por ${zone.name}`;
+                div.onclick = () => {
+                    document.getElementById('zoneFilter').value = zone.name;
+                    renderAll();
+                };
+                div.innerHTML = `
+                                            <span class="text-xs font-bold text-slate-600 mb-1">${zone.code}</span>
+                                            <div class="flex gap-2 text-[10px] font-mono">
+                                                <span class="text-slate-500" title="Camiones Activos"><i
+                                                        class="fa-solid fa-truck"></i> ${trucksInZone.length}</span>
+                                                <span class="text-red-500" title="Salidas Pendientes"><i
+                                                        class="fa-solid fa-arrow-right-from-bracket"></i>
+                                                    ${pendingDeparture.length}</span>
+                                                <span class="text-green-500" title="Retornos Pendientes"><i
+                                                        class="fa-solid fa-arrow-right-to-bracket"></i>
+                                                    ${pendingReturn.length}</span>
+                                            </div>
+                                            `;
+                container.appendChild(div);
+            });
+        }
+
+
+        function renderUnassigned(dateFilter) {
+            const unassignedDepartureZone =
+                document.getElementById('unassigned-departure-zone');
+            const unassignedReturnZone =
+                document.getElementById('unassigned-return-zone');
+            unassignedDepartureZone.innerHTML = '';
+            unassignedReturnZone.innerHTML = '';
+
+            const selectedZoneFilter = document.getElementById('zoneFilter').value;
+            const unassignedTypeFilter =
+                document.getElementById('unassignedTypeFilter').value;
+
+            let unassignedTrips = trips.filter(t => t.assignedTruck === null);
+            console.log(`Viajes sin camión total: ${unassignedTrips.length}`);
+
+            if (dateFilter) {
+                unassignedTrips = unassignedTrips.filter(t => t.loadDate === dateFilter);
+            }
+            console.log(`Viajes sin camión para fecha ${dateFilter}:
+                                            ${unassignedTrips.length}`);
+
+            if (selectedZoneFilter !== 'ALL') {
+                unassignedTrips = unassignedTrips.filter(t => t.zone ===
+                    selectedZoneFilter);
+            }
+
+            // ... (rest of filtering)
+
+            // NEW: Updated Filter Logic
+            // Reset layout first (ensure both are visible by default)
+            const depContainer =
+                document.getElementById('unassigned-departure-zone').parentElement;
+            const retContainer =
+                document.getElementById('unassigned-return-zone').parentElement;
+            depContainer.classList.remove('hidden');
+            retContainer.classList.remove('hidden');
+
+            // Logic for filtering
+            if (unassignedTypeFilter === 'DEPARTURE_FULL') {
+                unassignedTrips = unassignedTrips.filter(t => t.type === 'departure' &&
+                    t.isGroupage
+                    === false);
+                retContainer.classList.add('hidden');
+            } else if (unassignedTypeFilter === 'RETURN_FULL') {
+                unassignedTrips = unassignedTrips.filter(t => t.type === 'return' &&
+                    t.isGroupage
+                    === false);
+                depContainer.classList.add('hidden');
+            } else if (unassignedTypeFilter === 'FULL_LOAD') {
+                unassignedTrips = unassignedTrips.filter(t => t.isGroupage === false);
+            } else if (unassignedTypeFilter === 'DEPARTURE_GROUPAGE') {
+                unassignedTrips = unassignedTrips.filter(t => t.type === 'departure' &&
+                    t.isGroupage
+                    === true);
+                retContainer.classList.add('hidden');
+            } else if (unassignedTypeFilter === 'RETURN_GROUPAGE') {
+                unassignedTrips = unassignedTrips.filter(t => t.type === 'return' &&
+                    t.isGroupage
+                    === true);
+                depContainer.classList.add('hidden');
+            } else if (unassignedTypeFilter === 'GROUPAGE') {
+                unassignedTrips = unassignedTrips.filter(t => t.isGroupage === true);
+            }
+            // else ALL -> no extra filter behavior (shows everything)
+
+            const departureTrips = unassignedTrips.filter(t => t.type === 'departure');
+            const returnTrips = unassignedTrips.filter(t => t.type === 'return');
+
+            // NEW: Calculate Total Pallets & CR
+            const totalDepartureCR = departureTrips.reduce((sum, t) => sum +
+                getTripCR(t), 0);
+            const totalReturnCR = returnTrips.reduce((sum, t) => sum + getTripCR(t), 0);
+            const formattedDepartureCR = (Math.round(totalDepartureCR * 10) /
+                10).toFixed(1);
+            const formattedReturnCR = (Math.round(totalReturnCR * 10) / 10).toFixed(1);
+
+            const totalDeparturePG = departureTrips.reduce((sum, t) => sum + (t.pg ||
+                0), 0);
+            const totalDepartureEP = departureTrips.reduce((sum, t) => sum + (t.ep ||
+                0), 0);
+            const totalDeparturePP = departureTrips.reduce((sum, t) => sum + (t.pp ||
+                0), 0);
+
+            const totalReturnPG = returnTrips.reduce((sum, t) => sum + (t.pg || 0), 0);
+            const totalReturnEP = returnTrips.reduce((sum, t) => sum + (t.ep || 0), 0);
+            const totalReturnPP = returnTrips.reduce((sum, t) => sum + (t.pp || 0), 0);
+            // END NEW UNASSIGNED PALLET CALCULATION
+
+            renderList(unassignedDepartureZone, departureTrips, 'Sin salidas pendientes.');
+            renderList(unassignedReturnZone, returnTrips, 'Sin retornos pendientes.');
+
+            // NEW: Update counters to include CR and Pallet Counts
+            document.getElementById('count-departure').innerHTML =
+                `${departureTrips.length}
+                                            <span class="text-xs font-normal text-slate-500 ml-1">
+                                                (<span class="text-red-600 font-bold">${formattedDepartureCR} CR</span>
+                                                |
+                                                PG:${totalDeparturePG} / EP:${totalDepartureEP} /
+                                                PP:${totalDeparturePP})
+                                            </span>`;
+            document.getElementById('count-return').innerHTML = `${returnTrips.length}
+                                            <span class="text-xs font-normal text-slate-500 ml-1">
+                                                (<span class="text-red-600 font-bold">${formattedReturnCR} CR</span> |
+                                                PG:${totalReturnPG} / EP:${totalReturnEP} / PP:${totalReturnPP})
+                                            </span>`;
+        }
+
+        function renderList(container, list, emptyMsg) {
+            if (list.length === 0) {
+                container.innerHTML = `<div
+                                                class="text-center text-slate-300 py-4 italic text-[10px]">${emptyMsg}
+                                            </div>`;
+                return;
+            }
+            list.sort((a, b) => {
+                if (a.isUrgent && !b.isUrgent) return -1;
+                if (!a.isUrgent && b.isUrgent) return 1;
+                return compareDates(a.loadDate, b.loadDate);
+            });
+
+            list.forEach(trip => {
+                container.appendChild(createTripCard(trip));
+            });
+        }
+
+        // --- Funciones de Viajes y Drag/Drop ---
+
+        // Helper to render zone toggle buttons inside the truck row
+        function createZoneButton(activeList, zone, truckPlate) {
+            // activeList contains names (e.g. 'Murcia'), we display code (e.g. 'MU')
+            const isActive = activeList.includes(zone.name);
+            return `
+                                            <button onclick="toggleZone('${truckPlate}', '${zone.name}')" class="w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors cursor-pointer
+                    ${isActive
+                    ? `bg-${zone.baseColor}-500 text-white shadow-sm ring-1 ring-${zone.baseColor}-600`
+                    : 'bg-slate-100 text-slate-300 border border-slate-200 hover:bg-slate-200'}">
+                                                ${zone.code}
+                                            </button>
+                                            `;
+        }
+
+        // MODIFIED: Added isFullHeight parameter
+        function createTripCard(trip, isFullHeight = false) {
+            const div = document.createElement('div');
+
+            let borderColorClass;
+            if (trip.isUrgent || isOverdue(trip.loadDate)) {
+                borderColorClass = 'border-overdue';
+            } else {
+                borderColorClass = trip.type === 'departure' ? 'border-departure' :
+                    'border-return';
+            }
+
+            // NEW: Added flex-grow and h-full for single FULL_LOAD trips
+            const fullHeightClass = isFullHeight ? 'h-full flex-grow' : 'h-auto';
+
+            div.className = `draggable-source bg-white border-l-[4px]
+                                            ${borderColorClass}
+                                            shadow-sm rounded-sm p-1.5 cursor-grab relative group hover:shadow-md
+                                            hover:z-10
+                                            transition-all w-full flex flex-col justify-between select-none
+                                            ${fullHeightClass}`;
+            div.setAttribute('draggable', 'true');
+            div.setAttribute('ondragstart', `drag(event, ${trip.id}, '${trip.type}')`);
+            div.setAttribute('ondblclick', `editTripModal(${trip.id})`);
+
+            let notifyControlHTML = '';
+
+            if (trip.assignedTruck !== null) {
+                const buttonClasses = trip.isNotified
+                    ? 'bg-green-500 hover:bg-green-600 text-white'
+                    : 'bg-slate-300 hover:bg-slate-400 text-slate-800';
+
+                const safeNotifyTime = trip.notifyTime || '';
+                // CORRECTED LOGIC BLOCK
+                notifyControlHTML = '<div class="notify-control no-print">';
+                notifyControlHTML += '<input type="time" id="time-' + trip.id + '" ';
+                notifyControlHTML += ' value="' + safeNotifyTime + '" ';
+                notifyControlHTML += ' onchange="updateNotificationTime(' + trip.id + ')" ';
+                notifyControlHTML += ' class="text-xs border border-slate-300 rounded-l mr-[-1px] ' +
+                    'h-full focus:ring-red-500 outline-none">';
+
+                const titleText = trip.isNotified ? 'Marcar como Pendiente' :
+                    'Marcar como Avisado';
+                const iconClass = trip.isNotified ? 'check' : 'bell';
+
+                notifyControlHTML += '<button onclick="toggleNotificationStatus(' + trip.id + '); ' +
+                    'event.stopPropagation();" ';
+                notifyControlHTML += ' class="h-full rounded-r transition-colors ' + buttonClasses +
+                    ' flex items-center justify-center gap-0.5" ';
+                notifyControlHTML += ' title="' + titleText + '">';
+                notifyControlHTML += '<i class="fa-solid fa-' + iconClass +
+                    ' text-[8px]"></i>';
+                notifyControlHTML += '<span class="text-[8px] font-bold">' +
+                    'AVISO</span>';
+                notifyControlHTML += '</button></div>';
+                notifyControlHTML += '<span class="notify-date text-slate-400 font-mono">' +
+                    formatDate(trip.loadDate) + '</span>';
+
+
+            } else {
+                notifyControlHTML = '<span class="notify-date text-slate-400 font-mono">' +
+                    formatDate(trip.loadDate) + '</span>';
+            }
+
+            // Zone Badge (Top Left)
+            const zoneBadgeHTML = trip.zone
+                ? `<span
+                                                class="absolute top-1 left-1 px-1 py-0.5 rounded-full text-white text-[8px] font-bold ${ZONE_MAP[trip.zone].color}"
+                                                title="Zona: ${trip.zone}">${ZONE_MAP[trip.zone].code}</span>`
+                : '';
+
+            // NEW: Groupage/Full Load Badge (Top Right, adjusted position based on assignment)
+            const loadTypeBadgeRightPos = trip.assignedTruck !== null ? 'right-[115px]' : 'right-1';
+
+            // Generate Copy Button HTML
+            const copyButtonHTML = `
+                                            <button id="btn-copy-trip-${trip.id}"
+                                                onclick="event.stopPropagation(); copyTripToClipboard(${trip.id})"
+                                                class="ml-1 text-white/80 hover:text-white transition"
+                                                title="Copiar viaje">
+                                                <i class="fa-regular fa-copy text-[8px]"></i>
+                                            </button>
+                                            `;
+
+            const loadTypeBadgeHTML = trip.isGroupage
+                ? `<span
+                                                class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-white text-[8px] font-bold bg-sky-600 flex items-center"
+                                                title="Viaje de Grupaje">GRU${copyButtonHTML}</span>`
+                : `<span
+                                                class="absolute top-1 ${loadTypeBadgeRightPos} px-1 py-0.5 rounded-full text-slate-600 bg-slate-200 text-[8px] font-bold flex items-center"
+                                                title="Viaje de Carga Completa">COMP${copyButtonHTML.replace('text-white/80 hover:text-white', 'text-slate-500 hover:text-indigo-600')}</span>`;
+
+            // Pallet Info Container (PG, EP, PP, CR) - No absolute positioning, added highlighting
+            const tripCR = getTripCR(trip);
+            let palletInfoHTML = '';
+            if (trip.isGroupage) {
+                palletInfoHTML = `
+                                            <div
+                                                class="mt-1 p-0.5 text-[8px] font-bold text-slate-700 flex justify-end gap-2 border-t border-slate-100 bg-slate-50/70 rounded-sm">
+                                                <span title="Palet Grande (PG)">PG: ${trip.pg || 0}</span>
+                                                <span title="Euro Palet (EP)">EP: ${trip.ep || 0}</span>
+                                                <span title="Medio Palet (PP)">PP: ${trip.pp || 0}</span>
+                                                <span class="text-white bg-red-600 px-1 rounded ml-1 shadow-sm"
+                                                    title="Cantidad Real (CR)">CR: ${tripCR.toFixed(1)}</span>
+                                            </div>
+                                            `;
+            }
+
+            const driverInfo = trip.driver ? `<span
+                                                class="text-[9px] font-bold text-slate-700 truncate mt-0.5"
+                                                title="Conductor: ${trip.driver}"><i
+                                                    class="fa-solid fa-user text-[8px] text-slate-400 mr-1"></i>${trip.driver}</span>`
+                : '';
+
+            // Adjust client padding to account for zone badge
+            const clientInfoClasses = trip.assignedTruck !== null ? 'pr-[110px] pl-[25px]' : 'pr-1.5 pl-[25px]';
+
+            div.innerHTML = `
+                                            ${zoneBadgeHTML}
+                                            ${loadTypeBadgeHTML}
+                                            <div
+                                                class="flex justify-between items-start leading-none ${clientInfoClasses}">
+                                                <span class="font-bold text-[11px] text-slate-800 truncate"
+                                                    title="${trip.client}">${trip.client}</span>
+                                            </div>
+                                            ${notifyControlHTML}
+                                            ${driverInfo}
+                                            <div class="flex items-center gap-1 text-[10px] text-slate-500 mt-0.5">
+                                                <span class="truncate font-medium max-w-[45%]"
+                                                    title="${trip.origin}">${trip.origin}</span>
+                                                <i class="fa-solid fa-arrow-right text-[8px] text-slate-300"></i>
+                                                <span class="truncate font-bold max-w-[45%]"
+                                                    title="${trip.destination}">${trip.destination}</span>
+                                            </div>
+                                            ${palletInfoHTML}
+                                            `;
+            return div;
+        }
+
+        async function updateNotificationTime(id) {
+            const trip = trips.find(t => t.id === id);
+            const timeInput = document.getElementById(`time-${id}`);
+            if (trip && timeInput) {
+                trip.notifyTime = timeInput.value;
+                await api.saveTrip(trip);
+            }
+        }
+
+        async function toggleNotificationStatus(id) {
+            const trip = trips.find(t => t.id === id);
+            if (trip) {
+                trip.isNotified = !trip.isNotified;
+                await api.saveTrip(trip);
+                renderAll();
+            }
+        }
+
+        function renderTripZoneSelector(selectedZone = null) {
+            const selector = document.getElementById('tripZoneSelector');
+            if (!selector) return;
+            selector.innerHTML = ZONES.map(z => {
+                const isChecked = z.name === selectedZone ? 'checked' : '';
+                const baseColor = z.baseColor;
+
+                // MODIFICADO: Clases de selección más visibles (outline-offset-2, outline-*-800, bg-*-700)
+                const selectedClasses = isChecked
+                    ? `bg-${baseColor}-700 outline outline-4 outline-offset-2
+                                            outline-${baseColor}-800`
+                    : '';
+
+                return `
+                                            <label class="flex items-center cursor-pointer">
+                                                <input type="radio" name="tripZone" value="${z.name}" ${isChecked}
+                                                    class="hidden">
+                                                <span class="zone-label text-[10px] font-bold py-1 px-2 rounded-full border-2 border-${baseColor}-400 transition-all 
+                                     bg-${baseColor}-500 text-white 
+                                     hover:bg-${baseColor}-600 
+                                     ${selectedClasses}">
+                                                    ${z.name}
+                                                </span>
+                                            </label>
+                                            `;
+            }).join('');
+
+            selector.querySelectorAll('input[name="tripZone"]').forEach(input => {
+                const zoneLabel = input.nextElementSibling;
+                const baseColor = ZONE_MAP[input.value].baseColor;
+
+                input.addEventListener('change', () => {
+                    // 1. Resetear todas las etiquetas
+                    selector.querySelectorAll('input[name="tripZone"]').forEach(innerInput => {
+                        const innerLabel = innerInput.nextElementSibling;
+                        const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
+
+                        // Quitar las clases de selección fuerte (MODIFICADO)
+                        innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`,
+                            `outline-offset-2`, `outline-${innerBaseColor}-800`);
+                        // Volver al estado normal
+                        innerLabel.classList.add(`bg-${innerBaseColor}-500`);
+                    });
+
+                    // 2. Aplicar clases a la etiqueta seleccionada (MODIFICADO)
+                    zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`,
+                        `outline-offset-2`,
+                        `outline-${baseColor}-800`);
+                    zoneLabel.classList.remove(`bg-${baseColor}-500`);
+                });
+            });
+        }
+
+        /**
+        * Muestra u oculta los campos de palets según la casilla "Grupaje".
+        */
+        function togglePalletInputs() {
+            const isGroupage = document.getElementById('isGroupage').checked;
+            const palletContainer = document.getElementById('palletInputsContainer');
+            if (palletContainer) {
+                if (isGroupage) {
+                    palletContainer.classList.remove('hidden');
+                } else {
+                    palletContainer.classList.add('hidden');
+                }
+            }
+        }
+
+        function openModal() {
+            document.getElementById('editTripId').value = '';
+            document.getElementById('modalTitle').innerText = 'Agregar Nuevo Viaje';
+            document.getElementById('submitButton').innerText = 'Crear Ficha';
+            document.getElementById('deleteButton').classList.add('hidden');
+            document.getElementById('tripForm').reset();
+            document.getElementById('loadDate').value =
+                document.getElementById('dateFilter').value;
+            document.getElementById('unloadDate').value =
+                document.getElementById('dateFilter').value; // Default unload to load date
+
+            // NEW: Set default pallet values
+            document.getElementById('pg').value = 0;
+            document.getElementById('ep').value = 0;
+            document.getElementById('pp').value = 0;
+            // NEW: Set default for groupage (false)
+            document.getElementById('isGroupage').checked = false;
+
+            document.getElementById('isGroupage').checked = false;
+
+            renderTripZoneSelector();
+            renderTripDestinationZoneSelector(); // NEW
+            togglePalletInputs(); // Muestra/oculta los palets según el estado inicial
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function editTripModal(id) {
+            const trip = trips.find(t => t.id === id);
+            if (!trip) return;
+
+            document.getElementById('editTripId').value = id;
+            document.getElementById('modalTitle').innerText = 'Editar Viaje: ' +
+                trip.client;
+            document.getElementById('submitButton').innerText = 'Actualizar Viaje';
+            document.getElementById('deleteButton').classList.remove('hidden');
+
+            document.getElementById('client').value = trip.client;
+            document.getElementById('origin').value = trip.origin;
+            document.getElementById('destination').value = trip.destination;
+            document.getElementById('loadDate').value = trip.loadDate;
+            document.getElementById('unloadDate').value = trip.unloadDate;
+            document.getElementById('isUrgent').checked = trip.isUrgent;
+            document.getElementById('isGroupage').checked = trip.isGroupage || false;
+            // NEW: Populate isGroupage
+            document.querySelector(`input[name="tripType"][value="${trip.type}"]`).checked
+                = true;
+
+            // NEW: Populate pallet fields
+            document.getElementById('pg').value = trip.pg || 0;
+            document.getElementById('ep').value = trip.ep || 0;
+            document.getElementById('pp').value = trip.pp || 0;
+
+            renderTripZoneSelector(trip.zone);
+            renderTripDestinationZoneSelector(trip.destinationZone); // NEW
+            togglePalletInputs(); // Muestra/oculta los palets según el estado del viaje
+
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('tripForm').reset();
+        }
+
+        async function saveTrip(event) {
+            event.preventDefault();
+            const idInput = document.getElementById('editTripId').value;
+            const id = idInput ? parseInt(idInput) : null;
+            const client = document.getElementById('client').value;
+            const driver = ''; // Campo eliminado del formulario
+            const origin = document.getElementById('origin').value;
+            const destination = document.getElementById('destination').value;
+            const loadDate = document.getElementById('loadDate').value;
+            const unloadDate = document.getElementById('unloadDate').value;
+            const type = document.querySelector('input[name="tripType"]:checked').value;
+            const isUrgent = document.getElementById('isUrgent').checked;
+            const isGroupage = document.getElementById('isGroupage').checked;
+            // Get selected zone
+            const zoneInput = document.querySelector('input[name="tripZone"]:checked');
+            const zone = zoneInput ? zoneInput.value : null;
+
+            // NEW: Get selected destination zone
+            const destZoneInput =
+                document.querySelector('input[name="tripDestinationZone"]:checked');
+            const destinationZone = destZoneInput ? destZoneInput.value : null;
+
+            const pg = parseInt(document.getElementById('pg').value) || 0;
+            const ep = parseInt(document.getElementById('ep').value) || 0;
+            const pp = parseInt(document.getElementById('pp').value) || 0;
+
+            const tripData = {
+                id: id,
+                client, driver, origin, destination, loadDate, unloadDate, type,
+                isUrgent, isGroupage, zone,
+                destinationZone, // NEW
+                pg, ep, pp
+            };
+
+            // Preserve assigned truck/slot if editing, though usually modal is for generic editing.
+            // If it's a new trip, they are null by default in backend or we send null.
+            if (id) {
+                const existingTrip = trips.find(t => t.id === id);
+                if (existingTrip) {
+                    tripData.assignedTruck = existingTrip.assignedTruck;
+                    tripData.assignedSlot = existingTrip.assignedSlot;
+                    tripData.notifyTime = existingTrip.notifyTime;
+                    tripData.isNotified = existingTrip.isNotified;
+                }
+            }
+
+            try {
+                await api.saveTrip(tripData);
+                closeModal();
+                loadData(); // This will re-fetch data and re-render everything
+            } catch (err) {
+                console.error(err);
+                alert("Error al guardar viaje: " + err.message);
+            }
+        }
+
+        async function unassignAllTrips() {
+            const dateFilter = document.getElementById('dateFilter').value;
+            if (!confirm(`¿Desasignar TODOS los viajes del día ${formatDate(dateFilter)}? Esta acción moverá todos los viajes asignados a la sección de Pendientes.`)) {
+                return;
+            }
+            try {
+                await api.unassignDay(dateFilter);
+                await loadData();
+            } catch (e) {
+                console.error(e);
+                alert('Error al desasignar viajes: ' + e.message);
+            }
+        }
+
+        async function deleteTrip() {
+            const idToDelete = parseInt(document.getElementById('editTripId').value);
+            const trip = trips.find(t => t.id === idToDelete);
+
+            if (confirm(`¿Estás seguro de eliminar el viaje?`)) {
+
+                if (trip && trip.assignedTruck) {
+                    clearTruckPersistence(trip.assignedTruck);
+                }
+
+                try {
+                    await api.deleteTrip(idToDelete);
+                    await loadData();
+                    closeModal();
+                } catch (error) {
+                    console.error(error);
+                    alert("Error eliminando viaje: " + error.message);
+                }
+            }
+        }
+
+        function drag(ev, tripId, tripType) {
+            ev.dataTransfer.setData("text/plain", tripId);
+            ev.dataTransfer.setData("text/tripType", tripType);
+            const trip = trips.find(t => t.id === tripId);
+            ev.dataTransfer.setData("text/originalTruckPlate", trip.assignedTruck ||
+                '');
+            ev.effectAllowed = "move";
+        }
+
+        function allowDrop(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.add('drag-over');
+        }
+
+        document.addEventListener('dragleave', e => {
+            if (e.target.classList.contains('drop-zone'))
+                e.target.classList.remove('drag-over');
+        });
+
+        // NEW: Render Destination Zone Selector (Clone needed for different ID / Name)
+        function renderTripDestinationZoneSelector(selectedZone = null) {
+            const selector = document.getElementById('tripDestinationZoneSelector');
+            if (!selector) return;
+            selector.innerHTML = ZONES.map(z => {
+                const isChecked = z.name === selectedZone ? 'checked' : '';
+                const baseColor = z.baseColor;
+
+                const selectedClasses = isChecked
+                    ? `bg-${baseColor}-700 outline outline-4 outline-offset-2 outline-${baseColor}-800`
+                    : '';
+
+                return `
+                                            <label class="flex items-center cursor-pointer">
+                                                <input type="radio" name="tripDestinationZone" value="${z.name}"
+                                                    ${isChecked} class="hidden">
+                                                <span class="zone-label text-[10px] font-bold py-1 px-2 rounded-full border-2 border-${baseColor}-400 transition-all 
+                                     bg-${baseColor}-500 text-white 
+                                     hover:bg-${baseColor}-600 
+                                     ${selectedClasses}">
+                                                    ${z.name}
+                                                </span>
+                                            </label>
+                                            `;
+            }).join('');
+
+            selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(input => {
+                const zoneLabel = input.nextElementSibling;
+                const baseColor = ZONE_MAP[input.value].baseColor;
+
+                input.addEventListener('change', () => {
+                    selector.querySelectorAll('input[name="tripDestinationZone"]').forEach(innerInput => {
+                        const innerLabel = innerInput.nextElementSibling;
+                        const innerBaseColor = ZONE_MAP[innerInput.value].baseColor;
+                        innerLabel.classList.remove(`bg-${innerBaseColor}-700`, `outline-4`,
+                            `outline-offset-2`, `outline-${innerBaseColor}-800`);
+                        innerLabel.classList.add(`bg-${innerBaseColor}-500`);
+                    });
+                    zoneLabel.classList.add(`bg-${baseColor}-700`, `outline-4`,
+                        `outline-offset-2`,
+                        `outline-${baseColor}-800`);
+                    zoneLabel.classList.remove(`bg-${baseColor}-500`);
+                });
+            });
+        }
+
+        // ==========================================
+        // RESOURCES MODAL LOGIC (New)
+        // ==========================================
+
+        function openResourcesModal() {
+            renderResourcesLists();
+            switchResourceTab('drivers'); // Default tab
+            document.getElementById('resourcesModal').classList.remove('hidden');
+        }
+
+        function closeResourcesModal() {
+            document.getElementById('resourcesModal').classList.add('hidden');
+        }
+
+        function switchResourceTab(tab) {
+            document.getElementById('panel-drivers').classList.add('hidden');
+            document.getElementById('panel-trailers').classList.add('hidden');
+            document.getElementById('tab-drivers').classList.remove('border-indigo-600',
+                'text-indigo-700', 'bg-indigo-50');
+            document.getElementById('tab-trailers').classList.remove('border-indigo-600',
+                'text-indigo-700', 'bg-indigo-50');
+
+            document.getElementById(`panel-${tab}`).classList.remove('hidden');
+            const activeTabBtn = document.getElementById(`tab-${tab}`);
+            activeTabBtn.classList.add('border-indigo-600', 'text-indigo-700',
+                'bg-indigo-50');
+        }
+
+        function renderResourcesLists() {
+            // DRIVERS
+            const driversBody = document.getElementById('driversListBody');
+            driversBody.innerHTML = drivers.map(d => `
+                                            <tr class="border-b border-slate-100 hover:bg-slate-50">
+                                                <td class="p-2">${d.name}</td>
+                                                <td class="p-2">${d.dni}</td>
+                                                <td class="p-2">${d.phone}</td>
+                                                <td class="p-2">${d.alias}</td>
+                                                <td class="p-2 text-right">
+                                                    <button onclick="deleteResourceDriver(${d.id})"
+                                                        class="text-red-400 hover:text-red-600"><i
+                                                            class="fa-solid fa-trash"></i></button>
+                                                </td>
+                                            </tr>
+                                            `).join('');
+
+            // TRAILERS
+            const trailersBody = document.getElementById('trailersListBody');
+            trailersBody.innerHTML = trailers.map(t => `
+                                            <tr class="border-b border-slate-100 hover:bg-slate-50">
+                                                <td class="p-2 font-mono font-bold">${t.plate}</td>
+                                                <td class="p-2">${t.type}</td>
+                                                <td class="p-2 text-right">
+                                                    <button onclick="deleteResourceTrailer(${t.id})"
+                                                        class="text-red-400 hover:text-red-600"><i
+                                                            class="fa-solid fa-trash"></i></button>
+                                                </td>
+                                            </tr>
+                                            `).join('');
+        }
+
+        async function saveNewDriver() {
+            const name = document.getElementById('newDriverName').value;
+            const dni = document.getElementById('newDriverDni').value;
+            const phone = document.getElementById('newDriverPhone').value;
+            const alias = document.getElementById('newDriverAlias').value;
+
+            if (!name) return alert("El nombre es obligatorio");
+
+            try {
+                const driver = await api.saveDriver({ name, dni, phone, alias });
+                drivers.push(driver); // Update local list
+                renderResourcesLists();
+                // Clear inputs
+                document.getElementById('newDriverName').value = '';
+                document.getElementById('newDriverDni').value = '';
+                document.getElementById('newDriverPhone').value = '';
+                document.getElementById('newDriverAlias').value = '';
+            } catch (e) {
+                console.error(e); alert('Error al guardar conductor: ' +
+                    e.message);
+            }
+        }
+
+        async function deleteResourceDriver(id) {
+            if (!confirm('¿Eliminar conductor?')) return;
+            try {
+                await api.deleteDriver(id);
+                drivers = drivers.filter(d => d.id !== id);
+                renderResourcesLists();
+            } catch (e) { console.error(e); alert('Error al eliminar'); }
+        }
+
+        async function saveNewTrailer() {
+            const plate = document.getElementById('newTrailerPlate').value;
+            const type = document.getElementById('newTrailerType').value;
+
+            if (!plate) return alert("La matrícula es obligatoria");
+
+            try {
+                const trailer = await api.saveTrailer({ plate, type });
+                trailers.push(trailer);
+                renderResourcesLists();
+                document.getElementById('newTrailerPlate').value = '';
+                document.getElementById('newTrailerType').value = '';
+            } catch (e) {
+                console.error(e); alert('Error al guardar remolque: ' +
+                    e.message);
+            }
+        }
+
+        async function deleteResourceTrailer(id) {
+            if (!confirm('¿Eliminar remolque?')) return;
+            try {
+                await api.deleteTrailer(id);
+                trailers = trailers.filter(t => t.id !== id);
+                renderResourcesLists();
+            } catch (e) { console.error(e); alert('Error al eliminar'); }
+        }
+
+        // ==========================================
+        // FUNCIÓN DROP (MODIFICADA PARA ENFORZAR EXCLUSIVIDAD DE CARGA COMPLETA)
+        // ==========================================
+        async function drop(ev, plate, slotIndex) {
+            ev.preventDefault();
+            document.querySelectorAll('.drop-zone').forEach(el =>
+                el.classList.remove('drag-over'));
+
+            const tripId = parseInt(ev.dataTransfer.getData("text/plain"));
+            const originalTruckPlate =
+                ev.dataTransfer.getData("text/originalTruckPlate");
+            const trip = trips.find(t => t.id === tripId);
+
+            if (!trip) return;
+
+            const dateFilter = document.getElementById('dateFilter').value;
+
+            // --- Caso 1: Desasignar a pendientes (plate === null) ---
+            if (plate === null) {
+                const plateToRecalculate = trip.assignedTruck || originalTruckPlate;
+
+                trip.assignedTruck = null;
+                trip.assignedSlot = null;
+                await api.saveTrip(trip);
+
+                // Limpiar persistencia para forzar recálculo
+                if (plateToRecalculate) {
+                    clearTruckPersistence(plateToRecalculate);
+                }
+
+                await loadData();
+                return;
+            }
+
+            // --- Caso 2: Asignar a un camión (plate !== null) ---
+
+            const targetTruck = trucks.find(t => t.plate === plate);
+
+            if (targetTruck && isTruckOutOfService(targetTruck.plate, dateFilter)) {
+                alert(`¡Error! No puedes asignar un viaje al camión ${targetTruck.plate}
+                                            porque está
+                                            "Fuera de Servicio" en esta fecha.`);
+                return;
+            }
+
+            if (dateFilter && trip.loadDate !== dateFilter) {
+                alert(`¡Error! Este viaje es para el ${formatDate(trip.loadDate)} y estás
+                                            viendo la
+                                            planificación del ${formatDate(dateFilter)}.`);
+                return;
+            }
+
+            const incomingTripType = ev.dataTransfer.getData("text/tripType");
+            const dropSlotType = ev.currentTarget.getAttribute('data-slottype');
+
+            if (incomingTripType !== dropSlotType) {
+                alert(`¡Error! No puedes asignar un viaje de ${incomingTripType ===
+                    'departure' ?
+                    'SALIDA' : 'RETORNO'} en un hueco de ${dropSlotType === 'departure' ?
+                        'SALIDA' :
+                        'RETORNO'}.`);
+                return;
+            }
+
+            // =========================================================================
+            // LÓGICA DE EXCLUSIVIDAD DE CARGA COMPLETA (COMP) Y STACKING DE GRUPAJE (GRU)
+            // =========================================================================
+
+            const assignedTripsInSlot = trips.filter(t =>
+                t.assignedTruck === plate &&
+                t.assignedSlot === slotIndex &&
+                t.loadDate === dateFilter &&
+                t.id !== tripId // Excluye el viaje que se está moviendo (si ya estaba en este slot)
+            );
+
+            const isSlotOccupied = assignedTripsInSlot.length > 0;
+            const isSlotOccupiedByFullLoad = assignedTripsInSlot.some(t => t.isGroupage
+                ===
+                false);
+
+            // Regla 1: Viaje entrante es COMPLETO
+            if (trip.isGroupage === false) {
+                if (isSlotOccupied) {
+                    alert(`¡Error! Una Carga COMPLETA solo puede ocupar un hueco completamente
+                                            vacío.`);
+                    return;
+                }
+            }
+
+            // Regla 2: Viaje entrante es GRUPAJE
+            else if (trip.isGroupage === true) {
+                if (isSlotOccupiedByFullLoad) {
+                    alert(`¡Error! No puedes asignar un Grupaje a un hueco que ya contiene una
+                                            Carga
+                                            Completa.`);
+                    return;
+                }
+                // Si el slot está vacío o solo contiene otros Grupajes, la asignación es permitida.
+            }
+            // =========================================================================
+
+            // Si el viaje ya estaba asignado a otro slot/camión, limpiamos la persistencia del camión anterior.
+            if (trip.assignedTruck && trip.assignedTruck !== plate) {
+                await clearTruckPersistence(trip.assignedTruck); // Await for Persistence
+
+            }
+
+            trip.assignedTruck = plate;
+            trip.assignedSlot = slotIndex;
+
+            // NEW: If we assign a trip, we allow the location to be auto-updated.
+            // This overrides any previous manual setting (but manual setting is saved in manualLocation).
+            const assignedTruckObj = trucks.find(t => t.plate === plate);
+            if (assignedTruckObj) {
+                assignedTruckObj.isLocationManual = false;
+                assignedTruckObj.isZoneManual = false; // NEW: Reset manual zone lock
+                // We must save this change to persist the "auto mode" re-enabling.
+                await api.saveTruck(assignedTruckObj);
+            }
+
+            // Forzar recálculo de ubicación para el camión de destino para el día siguiente.
+            clearTruckPersistence(plate);
+
+            await api.saveTrip(trip); // SAVE API
+            await loadData();
+        }
+
+        function exportToCSV() {
+            let csv = 'Matrícula,Ubicación,Slot,Tipo,Cliente,Conductor,Origen,Destino,Fecha Carga,Fecha Descarga,Urgente,Grupaje,PG,EP,PP,CR,Hora Aviso,Avisado,Fuera de Servicio,Zonas Camión,Zona Viaje,Fecha Creación,Fecha Eliminación\\n'; // MODIFIED HEADER
+            const dateFilter = document.getElementById('dateFilter').value;
+            const selectedZoneFilter = document.getElementById('zoneFilter').value;
+
+            let filteredTrucks = trucks.filter(t => isTruckActiveForDate(t,
+                dateFilter));
+
+            if (selectedZoneFilter !== 'ALL') {
+                filteredTrucks = filteredTrucks.filter(t =>
+                    t.zones.includes(selectedZoneFilter));
+            }
+
+            filteredTrucks.forEach(truck => {
+                const plate = truck.plate;
+                // Usamos getTruckSuggestedLocation para obtener la ubicación de partida del
+                // día
+                const location = getTruckSuggestedLocation(truck, dateFilter) || '';
+                const isOutOfService = isTruckOutOfService(plate, dateFilter) ? 'SI' : 'NO';
+                const creationDate = truck.creationDate || '';
+                const deletionDate = truck.deletionDate || '';
+                const truckZones = truck.zones ? truck.zones.join('|') : '';
+
+                for (let i = 0; i < 4; i++) { // MODIFIED: Get ALL trips for the slot
+                    const assignedTrips = trips.filter(t => t.assignedTruck === plate && t.assignedSlot === i && t.loadDate === dateFilter);
+                    const slotType = i % 2 === 0 ? `SALIDA ${Math.floor(i / 2) + 1}` : `RETORNO ${Math.floor(i / 2) + 1}`;
+
+                    if (assignedTrips.length > 0) {
+                        assignedTrips.forEach(trip => {
+                            const isNotifiedText = trip.isNotified ? 'SI' : 'NO';
+                            const isUrgentText = trip.isUrgent ? 'SI' : 'NO';
+                            const isGroupageText = trip.isGroupage ? 'SI' : 'NO'; // NEW LINE
+                            const notifyTime = trip.notifyTime || '';
+                            const tripZone = trip.zone || '';
+                            const tripCR = getTripCR(trip);
+                            // MODIFIED ROW
+                            csv += `"${plate}","${location}","${slotType}","${trip.type === 'departure' ? 'SALIDA' : 'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg || 0}","${trip.ep || 0}","${trip.pp || 0}","${tripCR}","${notifyTime}","${isNotifiedText}","${isOutOfService}","${truckZones}","${tripZone}","${creationDate}","${deletionDate}"\n`;
+                        });
+                    } else {
+                        csv +=
+                            `"${plate}","${location}","${slotType}","","","","","","","","","","","","","","","","${isOutOfService}","${truckZones}","","${creationDate}","${deletionDate}"\n`;
+                    }
+                }
+            });
+
+            const unassignedTypeFilter =
+                document.getElementById('unassignedTypeFilter').value;
+            let unassigned = trips.filter(t => t.assignedTruck === null &&
+                t.loadDate ===
+                dateFilter);
+
+            if (selectedZoneFilter !== 'ALL') {
+                unassigned = unassigned.filter(t => t.zone === selectedZoneFilter);
+            }
+
+            if (unassignedTypeFilter === 'GROUPAGE') {
+                unassigned = unassigned.filter(t => t.isGroupage === true);
+            } else if (unassignedTypeFilter === 'FULL_LOAD') {
+                unassigned = unassigned.filter(t => t.isGroupage === false);
+            }
+
+            unassigned.forEach(trip => {
+                const isUrgentText = trip.isUrgent ? 'SI' : 'NO';
+                const isGroupageText = trip.isGroupage ? 'SI' : 'NO'; // NEW LINE
+                const tripZone = trip.zone || '';
+                const tripCR = getTripCR(trip);
+                // MODIFIED ROW
+                csv += `SIN ASIGNAR,-,"-","${trip.type === 'departure' ? 'SALIDA' : 'RETORNO'}","${trip.client}","${trip.driver}","${trip.origin}","${trip.destination}","${trip.loadDate}","${trip.unloadDate}","${isUrgentText}","${isGroupageText}","${trip.pg || 0}","${trip.ep || 0}","${trip.pp || 0}","${tripCR}",-,"NO","NO",-,"${tripZone}",-,"-"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download",
+                `planning_trafico_${dateFilter}_${selectedZoneFilter}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function printPlanning() {
+            window.print();
+        }
+
+        document.onkeydown = (evt) => { if (evt.keyCode == 27) closeModal(); };
+
+        loadData();
+    </script>
+</body>
+
+</html>
