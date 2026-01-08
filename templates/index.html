@@ -1453,13 +1453,13 @@ ${loadInfo}`;
 
             // Find the latest event that happened ON or BEFORE the target date
             // Since history is sorted descending (latest first), we just find the first one <= date
-            const latestEvent = history.find(e => compareDates(e.date, date) <= 0); return
-            latestEvent ? latestEvent.is_out_of_service : false;
-        } async function
-            toggleOutOfService(plate) {
-            const
-                dateFilter = document.getElementById('dateFilter').value; const
-                    truck = trucks.find(t => t.plate === plate);
+            const latestEvent = history.find(e => compareDates(e.date, date) <= 0);
+            return latestEvent ? latestEvent.is_out_of_service : false;
+        }
+
+        async function toggleOutOfService(plate) {
+            const dateFilter = document.getElementById('dateFilter').value;
+            const truck = trucks.find(t => t.plate === plate);
             if (!truck) return;
 
             const currentState = isTruckOutOfService(plate, dateFilter);
