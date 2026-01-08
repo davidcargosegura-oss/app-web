@@ -1595,6 +1595,10 @@ ${loadInfo}`;
             const sortedTrucks = [...inServiceTrucks, ...outOfServiceTrucks];
 
             sortedTrucks.forEach(rawTruck => {
+                // FIXED: Calculate suggested location/zones on the RAW truck BEFORE creating the effective copy.
+                // This ensures 'truck.zones' used for color/badges includes the auto-calculated values from current trips.
+                const displayLocation = getTruckSuggestedLocation(rawTruck, dateFilter);
+
                 // Resolve Truck Data for Display (Temporal)
                 const truck = getTruckDataForDate(rawTruck, dateFilter);
 
@@ -1630,11 +1634,6 @@ ${loadInfo}`;
 
                 const row = document.createElement('div');
                 row.className = rowClass;
-
-                // For display location, we need to run the calc on the RAW truck object
-                // because it might update intrinsic state (though we are careful).
-                // But display depends on render.
-                const displayLocation = getTruckSuggestedLocation(rawTruck, dateFilter);
 
                 // Use effective truck manual data
                 const displayManualLocation = truck.manualLocation || '';
