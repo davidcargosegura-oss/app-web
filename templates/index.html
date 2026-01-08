@@ -1807,7 +1807,10 @@ ${loadInfo}`;
         }
 
         // Render Zone Counters (Top Statistics)
-        function renderZoneCounters(dateFilter) {
+        function renderZoneCounters() {
+            // STRICTLY use the date from the DOM to avoid any argument confusion
+            const dateFilter = document.getElementById('dateFilter').value;
+
             const container = document.getElementById('zone-counters');
             container.innerHTML = '';
 
