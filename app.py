@@ -537,9 +537,37 @@ def delete_truck_via_post():
         return jsonify({'error': 'Plate is required'}), 400
     t = Truck.query.filter_by(plate=plate).first()
     if t:
+        # 1. Delete associated FDS records (Out of Service History)
+        TruckFds.query.filter_by(truck_plate=plate).delete()
+        
+        # 2. Unassign associated Trips (Set assigned_truck_plate to NULL)
+        trips = Trip.query.filter_by(assigned_truck_plate=plate).all()
+        for trip in trips:
+            trip.assigned_truck_plate = None
+            trip.assigned_slot = None
+            
+        # 3. Now safe to delete the truck
         db.session.delete(t)
         db.session.commit()
     return jsonify({'success': True})
+
+@app.route('/api/deactivate-truck', methods=['POST'])
+@login_required
+def deactivate_truck():
+    """Soft delete: Set deletion_date so truck is hidden from that date onwards"""
+    d = request.json
+    plate = d.get('plate')
+    date = d.get('date') # Effective deletion date
+    
+    if not plate or not date:
+        return jsonify({'error': 'Plate and date are required'}), 400
+        
+    t = Truck.query.filter_by(plate=plate).first()
+    if t:
+        t.deletion_date = date
+        db.session.commit()
+        return jsonify({'success': True})
+    return jsonify({'error': 'Truck not found'}), 404
 
 @app.route('/update_db_schema')
 def update_db_schema():
