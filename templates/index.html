@@ -1847,23 +1847,38 @@ ${loadInfo}`;
                     return effZones.includes(zone.name);
                 });
 
-                // Count PENDING TRIPS for this zone (Origin = Zone)
+                // Count PENDING TRIPS (Unassigned) - Red Arrow
                 const pendingDeparture = trips.filter(t =>
                     t.assignedTruck === null &&
                     t.zone === zone.name &&
                     t.type === 'departure' &&
                     (!dateFilter || t.loadDate === dateFilter)
                 );
-
                 const pendingReturn = trips.filter(t =>
                     t.assignedTruck === null &&
                     t.zone === zone.name &&
                     t.type === 'return' &&
                     (!dateFilter || t.loadDate === dateFilter)
                 );
+                const totalPending = pendingDeparture.length + pendingReturn.length;
+
+                // Count ASSIGNED TRIPS - Green Arrow
+                const assignedDeparture = trips.filter(t =>
+                    t.assignedTruck !== null &&
+                    t.zone === zone.name &&
+                    t.type === 'departure' &&
+                    (!dateFilter || t.loadDate === dateFilter)
+                );
+                const assignedReturn = trips.filter(t =>
+                    t.assignedTruck !== null &&
+                    t.zone === zone.name &&
+                    t.type === 'return' &&
+                    (!dateFilter || t.loadDate === dateFilter)
+                );
+                const totalAssigned = assignedDeparture.length + assignedReturn.length;
 
                 // Only show zone if it has any value > 0
-                const totalCount = trucksInZone.length + pendingDeparture.length + pendingReturn.length;
+                const totalCount = trucksInZone.length + totalPending + totalAssigned;
                 if (totalCount === 0) return; // Skip zones with all zeros
 
                 const div = document.createElement('button');
@@ -1879,12 +1894,16 @@ ${loadInfo}`;
                                             <div class="flex gap-2 text-[10px] font-mono">
                                                 <span class="text-slate-500" title="Camiones Activos"><i
                                                         class="fa-solid fa-truck"></i> ${trucksInZone.length}</span>
-                                                <span class="text-red-500" title="Salidas Pendientes"><i
-                                                        class="fa-solid fa-arrow-right-from-bracket"></i>
-                                                    ${pendingDeparture.length}</span>
-                                                <span class="text-green-500" title="Retornos Pendientes"><i
-                                                        class="fa-solid fa-arrow-right-to-bracket"></i>
-                                                    ${pendingReturn.length}</span>
+                                                
+                                                <span class="text-red-500" title="Viajes Sin Asignar">
+                                                    <i class="fa-solid fa-file-circle-xmark"></i>
+                                                    ${totalPending}
+                                                </span>
+                                                
+                                                <span class="text-green-500" title="Viajes Asignados">
+                                                    <i class="fa-solid fa-file-circle-check"></i>
+                                                    ${totalAssigned}
+                                                </span>
                                             </div>
                                             `;
                 container.appendChild(div);
