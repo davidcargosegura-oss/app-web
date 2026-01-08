@@ -793,25 +793,51 @@
             if (truck.deletionDate && compareDates(truck.deletionDate, date) <= 0) return false; return true;
         }
         function getTruckDataForDate(truck, date) {
-            let history = []; try {
-                history = typeof
-                    truck.history === 'string' ? JSON.parse(truck.history) : (truck.history || []);
-            } catch (e) {
-                history = [];
-            } let effectiveEntry = null; for (const entry of history) {
-                if
-                    (compareDates(entry.date, date) <= 0) { effectiveEntry = entry; } else { break; }
-            } const
-                resolved = { ...truck }; if (effectiveEntry) {
-                    if (effectiveEntry.trailer !== undefined)
-                        resolved.trailer = effectiveEntry.trailer; if (effectiveEntry.driverName !== undefined)
-                        resolved.driverName = effectiveEntry.driverName; if (effectiveEntry.driverPhone !== undefined)
-                        resolved.driverPhone = effectiveEntry.driverPhone; if (effectiveEntry.driverDni !== undefined)
-                        resolved.driverDni = effectiveEntry.driverDni; if (effectiveEntry.driverAlias !== undefined)
-                        resolved.driverAlias = effectiveEntry.driverAlias; if (effectiveEntry.manualLocation !== undefined)
-                        resolved.manualLocation = effectiveEntry.manualLocation; if (effectiveEntry.manualZones
-                            !== undefined) resolved.manualZones = effectiveEntry.manualZones;
-                } return resolved;
+            // Find the history entry that applies to this date.
+            // General fields (driver, trailer) persist from the last entry <= date.
+            // Manual Location/Zones ONLY apply if entry.date === date.
+
+            const history = truck.history || [];
+            if (!history.length) {
+                return truck;
+            }
+
+            // 1. Find effectively active entry (for persistent fields like driver/trailer)
+            let effectiveEntry = null;
+            for (const entry of history) {
+                if (compareDates(entry.date, date) <= 0) {
+                    effectiveEntry = entry;
+                } else {
+                    break;
+                }
+            }
+
+            // 2. Find exact match entry (for daily-only fields like manual location)
+            const exactEntry = history.find(e => compareDates(e.date, date) === 0);
+
+            const resolved = { ...truck };
+
+            // Apply persistent fields from effective entry
+            if (effectiveEntry) {
+                if (effectiveEntry.trailer !== undefined) resolved.trailer = effectiveEntry.trailer;
+                if (effectiveEntry.driverName !== undefined) resolved.driverName = effectiveEntry.driverName;
+                if (effectiveEntry.driverPhone !== undefined) resolved.driverPhone = effectiveEntry.driverPhone;
+                if (effectiveEntry.driverDni !== undefined) resolved.driverDni = effectiveEntry.driverDni;
+                if (effectiveEntry.driverAlias !== undefined) resolved.driverAlias = effectiveEntry.driverAlias;
+            }
+
+            // Apply daily-only fields from exact entry ONLY
+            if (exactEntry) {
+                if (exactEntry.manualLocation !== undefined) resolved.manualLocation = exactEntry.manualLocation;
+                if (exactEntry.manualZones !== undefined) resolved.manualZones = exactEntry.manualZones;
+            } else {
+                // If no exact entry for this date, ensure we don't bleed values from the main 'truck' object 
+                // if the main object has them set (representing 'current' state).
+                resolved.manualLocation = '';
+                resolved.manualZones = [];
+            }
+
+            return resolved;
         } function
             copyTruckData(plate) {
             const dateFilter = document.getElementById('dateFilter').value; const
@@ -1215,54 +1241,62 @@ ${loadInfo}`;
         }
 
         function getTruckSuggestedLocation(truck, currentDate, forceRecalculate = false) {
+            // Find trips that UNLOAD on or before the current date.
             const completedTrips = trips.filter(t =>
                 t.assignedTruck === truck.plate &&
-                compareDates(t.unloadDate, currentDate) <= 0); if (completedTrips.length === 0) {
-                    return
-                    truck.location || '';
-                } completedTrips.sort((a, b) => {
-                    const aSameDay = (a.loadDate === currentDate && a.unloadDate === currentDate);
-                    const bSameDay = (b.loadDate === currentDate && b.unloadDate === currentDate);
-                    if (aSameDay && !bSameDay) return -1;
-                    if (!aSameDay && bSameDay) return 1;
+                compareDates(t.unloadDate, currentDate) <= 0
+            );
 
-                    const dateComparison = compareDates(b.unloadDate, a.unloadDate);
-                    if (dateComparison !== 0) return dateComparison;
+            if (completedTrips.length === 0) {
+                // No history? Return current (or default).
+                return truck.location || '';
+            }
 
-                    return (b.assignedSlot || 0) - (a.assignedSlot || 0);
-                });
+            // USER RULE:
+            // 1. "si dos viajes descargan el mismo dia que prebalezca el que se haya cargado ese mismo dia"
+            // 2. "si los dos se han cargado ese dia el que este puesto en un hueco mas a la derecha"
+
+            // So we sort to find the "Winner" at index 0.
+            completedTrips.sort((a, b) => {
+                const dateComparison = compareDates(b.unloadDate, a.unloadDate);
+                if (dateComparison !== 0) return dateComparison; // Latest unload date first
+
+                // If unload dates are equal (e.g. both unload Today)
+                const aSameDay = (a.loadDate === a.unloadDate);
+                const bSameDay = (b.loadDate === b.unloadDate);
+
+                // Priority to Same Day Load/Unload
+                if (aSameDay && !bSameDay) return -1; // a comes first
+                if (!aSameDay && bSameDay) return 1;  // b comes first
+
+                // If both are same-day OR both are multi-day, tie-break with Slot (Rightmost/Higher first)
+                return (b.assignedSlot || 0) - (a.assignedSlot || 0);
+            });
 
             const lastCompletedTrip = completedTrips[0];
             const calculatedLocation = lastCompletedTrip.destination;
 
-            if (truck.location !== calculatedLocation) {
-                truck.location = calculatedLocation;
-                truck.locationLastUpdatedDate = currentDate;
+            // Update the IN-MEMORY truck object for display purposes.
+            // avoiding api.saveTruck to prevent DB thrashing and temporal state corruption.
 
-                const zonesManualApplies = truck.isZoneManual && compareDates(currentDate,
-                    truck.zonesLastUpdatedDate || '2000-01-01') >= 0;
-                if (!zonesManualApplies) {
-                    let newZones = [];
-                    if (lastCompletedTrip.destinationZone) {
-                        newZones = [lastCompletedTrip.destinationZone];
-                    } else {
-                        const matchedZone = ZONES.find(z => z.name.toLowerCase() ===
-                            calculatedLocation.toLowerCase());
-                        if (matchedZone) {
-                            newZones = [matchedZone.name];
-                        }
-                    }
+            truck.location = calculatedLocation;
+            // truck.locationLastUpdatedDate = currentDate; // Optional: track when it was calculated
 
-                    const currentZonesStr = truck.zones.slice().sort().join(',');
-                    const newZonesStr = newZones.slice().sort().join(',');
-
-                    if (currentZonesStr !== newZonesStr) {
-                        truck.zones = newZones;
-                    }
+            // Calculate Zones based on Trip Destination Zone OR Location mapping
+            let newZones = [];
+            if (lastCompletedTrip.destinationZone) {
+                newZones = [lastCompletedTrip.destinationZone];
+            } else {
+                const matchedZone = ZONES.find(z => z.name.toLowerCase() === calculatedLocation.toLowerCase());
+                if (matchedZone) {
+                    newZones = [matchedZone.name];
                 }
-
-                api.saveTruck(truck);
             }
+
+            // Only update auto zones if we are not in a manual override state for THIS DAY
+            // (The manual check is handled by `getTruckDataForDate` usually merging manualZones, 
+            // but here we set the 'fallback' auto zones).
+            truck.zones = newZones;
 
             return calculatedLocation;
         }
@@ -1626,7 +1660,7 @@ ${loadInfo}`;
                                                     class="fa-solid fa-truck ${isOutOfService ? 'text-red-300' : 'text-slate-500'} text-xs"></i>
                                                 <button
                                                     onclick="event.stopPropagation(); toggleOutOfService('${plate}')"
-                                                    class="${isOutOfService ? 'text-red-400' : 'text-slate-500'} hover:text-amber-400 transition opacity-0 group-hover:opacity-100 no-print"
+                                                    class="${isOutOfService ? 'text-red-400' : 'text-slate-300'} hover:text-amber-400 transition no-print"
                                                     title="${isOutOfService ? 'Quitar Fuera de Servicio' : 'Marcar Fuera de Servicio'}">
                                                     <i class="fa-solid fa-power-off text-xs"></i>
                                                 </button>
@@ -1634,12 +1668,12 @@ ${loadInfo}`;
                                             <div class="flex items-center gap-1">
                                                 <button onclick="event.stopPropagation(); copyTruckData('${plate}')"
                                                     id="btn-copy-${plate}"
-                                                    class="text-slate-400 hover:text-white transition opacity-0 group-hover:opacity-100 no-print"
+                                                    class="text-slate-400 hover:text-white transition no-print"
                                                     title="Copiar datos">
                                                     <i class="fa-solid fa-copy text-xs"></i>
                                                 </button>
                                                 <button onclick="event.stopPropagation(); openTruckModal('${plate}')"
-                                                    class="text-slate-400 hover:text-white transition opacity-0 group-hover:opacity-100 no-print"
+                                                    class="text-slate-400 hover:text-white transition no-print"
                                                     title="Editar camión">
                                                     <i class="fa-solid fa-pen text-xs"></i>
                                                 </button>
@@ -1778,12 +1812,40 @@ ${loadInfo}`;
             container.innerHTML = '';
 
             ZONES.forEach((zone) => {
-                // Count TRUCKS in this zone
-                const trucksInZone = trucks.filter(t =>
-                    isTruckActiveForDate(t, dateFilter) &&
-                    !isTruckOutOfService(t.plate, dateFilter) &&
-                    t.zones.includes(zone.name)
-                );
+                // Count TRUCKS in this zone (Active & Correct Zone)
+                const trucksInZone = trucks.filter(t => {
+                    if (!isTruckActiveForDate(t, dateFilter)) return false;
+                    if (isTruckOutOfService(t.plate, dateFilter)) return false;
+
+                    const eff = getTruckDataForDate(t, dateFilter);
+                    const hasManual = eff.manualZones && eff.manualZones.includes(zone.name);
+
+                    // IF manual zones depend on `isZoneManual` flag or just presence? 
+                    // Usually manual overrides auto. 
+                    // If we have manual zones, we count them. 
+                    // If NO manual zones, we check the auto zones (which might be in `eff.zones` or need recalc).
+                    // For the counter, we should ideally rely on what `renderPlanning` decided.
+                    // But `renderPlanning` runs AFTER this usually? No, order matters.
+                    // Let's rely on `getTruckSuggestedLocation` to have set the in-memory `t.zones` if auto?
+                    // Or re-calculate here to be safe.
+
+                    if (hasManual) return true;
+
+                    // If not manual, check auto/calculated
+                    // We calculate it on the fly to be sure
+                    const calculatedLoc = getTruckSuggestedLocation(t, dateFilter);
+                    // We need to map location -> zone
+                    // We can check if `t.zones` includes it, but `t` might be stale.
+                    // The safer way is:
+
+                    // If `getTruckSuggestedLocation` returns a location, does it map to this zone?
+                    // This is complex because mapping isn't 1:1 always.
+                    // Let's stick to checking `t.zones` assuming `renderPlanning` or a pre-calc pass updated it?
+                    // OR:
+
+                    const effZones = t.zones || []; // From memory (updated by renderPlanning usually)
+                    return effZones.includes(zone.name);
+                });
 
                 // Count PENDING TRIPS for this zone (Origin = Zone)
                 const pendingDeparture = trips.filter(t =>
@@ -1828,6 +1890,7 @@ ${loadInfo}`;
                 container.appendChild(div);
             });
         }
+
 
 
         function renderUnassigned(dateFilter) {
